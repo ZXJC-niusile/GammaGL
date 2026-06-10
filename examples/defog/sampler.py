@@ -26,32 +26,26 @@ def compute_step_probs(R_t_X, R_t_E, X_t, E_t, dt):
 
     cur_X = tlx.argmax(X_t, axis=-1)
     cur_E = tlx.argmax(E_t, axis=-1)
+    cur_X_mask = tlx.cast(
+        F.one_hot(cur_X, num_classes=step_X.shape[-1]), step_X.dtype
+    )
+    cur_E_mask = tlx.cast(
+        F.one_hot(cur_E, num_classes=step_E.shape[-1]), step_E.dtype
+    )
 
-    # TODO: Performance Optimization
-    # Currently converting tensors to numpy for inplace modifications (setting current state 
-    # to 0 and writing back stay probability). Doing this entirely in pure tensors would 
-    # prevent CPU-GPU synchronization bottlenecks during sampling.
-    step_X_np = tlx.convert_to_numpy(step_X)
-    step_E_np = tlx.convert_to_numpy(step_E)
-    cur_X_np = tlx.convert_to_numpy(cur_X).astype(np.int64)
-    cur_E_np = tlx.convert_to_numpy(cur_E).astype(np.int64)
+    step_X = step_X * (1.0 - cur_X_mask)
+    step_E = step_E * (1.0 - cur_E_mask)
+    stay_X = tlx.maximum(
+        1.0 - tlx.reduce_sum(step_X, axis=-1, keepdims=True),
+        tlx.zeros_like(step_X[..., :1]),
+    )
+    stay_E = tlx.maximum(
+        1.0 - tlx.reduce_sum(step_E, axis=-1, keepdims=True),
+        tlx.zeros_like(step_E[..., :1]),
+    )
 
-    bs, n, dx = step_X_np.shape
-    _, n1, n2, de = step_E_np.shape
-
-    step_X_np[np.arange(bs)[:, None], np.arange(n)[None, :], cur_X_np] = 0.0
-    stay_X = np.clip(1.0 - step_X_np.sum(axis=-1, keepdims=True), a_min=0.0, a_max=None)
-    step_X_np[np.arange(bs)[:, None], np.arange(n)[None, :], cur_X_np] = stay_X[..., 0]
-
-    b_idx = np.arange(bs)[:, None, None]
-    i_idx = np.arange(n1)[None, :, None]
-    j_idx = np.arange(n2)[None, None, :]
-    step_E_np[b_idx, i_idx, j_idx, cur_E_np] = 0.0
-    stay_E = np.clip(1.0 - step_E_np.sum(axis=-1, keepdims=True), a_min=0.0, a_max=None)
-    step_E_np[b_idx, i_idx, j_idx, cur_E_np] = stay_E[..., 0]
-
-    prob_X = tlx.convert_to_tensor(step_X_np.astype(np.float32))
-    prob_E = tlx.convert_to_tensor(step_E_np.astype(np.float32))
+    prob_X = step_X + stay_X * cur_X_mask
+    prob_E = step_E + stay_E * cur_E_mask
     return prob_X, prob_E
 
 
