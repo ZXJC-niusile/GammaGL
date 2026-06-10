@@ -53,3 +53,8 @@ def test_defog_smoke():
         print("Stderr:\n", result.stderr)
         
     assert result.returncode == 0, f"DeFoG smoke test failed with return code {result.returncode}"
+
+
+if __name__ == '__main__':
+    test_defog_smoke()
+    print("DeFoG smoke test passed!")

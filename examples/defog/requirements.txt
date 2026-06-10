@@ -3,6 +3,7 @@
 
 # RDKit is strictly required for evaluating generated molecular validity (qm9, zinc)
 rdkit
+fcd
 
 # Graph-Tool is strictly required for SBM structural community validation 
 # (Note: graph-tool installation via conda is recommended due to C++ compilation requirements)
@@ -11,5 +12,6 @@ graph-tool
 
 # NetworkX is used across many heuristic verifications
 networkx
-
+scipy
+pyemd
 

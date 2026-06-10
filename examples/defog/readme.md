@@ -34,7 +34,6 @@ This directory contains the GammaGL reproduction of DeFoG. The current implement
 | `train_metrics.py` | Cross-entropy / KLD training metrics |
 | `rdkit_functions.py` | Molecular metrics and SMILES helpers |
 | `spectre_utils.py` | Synthetic graph evaluation |
-| `multi_gpu.py` | Multi-GPU training helpers |
 
 ## Model Components
 
@@ -49,14 +48,14 @@ For named datasets (`planar`, `tree`, `sbm`, `qm9`, `guacamol`, `zinc250k`, `mos
 
 - Presets set dataset-specific values such as `n_layers`, `batch_size`, `sample_steps`, validation cadence, and sampling distortion.
 - Explicit CLI flags override the preset values.
-- `tls` and `synthetic` do not receive these preset overrides.
+- `synthetic` does not receive dataset preset overrides.
 
 ## Checkpoint Semantics
 
 Training writes paired model / EMA snapshots:
 
 - `last_model.npz` / `last_ema.pkl`
-- `best_model.npz` / `best_ema.pkl`
+- `best_model.npz` / `best_ema.pkl` when validation sampling is enabled
 
 Best-checkpoint selection is validation-driven:
 
@@ -84,7 +83,6 @@ Sampling prefers `best_model.npz`; if it does not exist, it falls back to `last_
 
 **Supported Backend:**
 - This implementation currently supports **`TL_BACKEND=torch` only**. Other TensorLayerX backends (TensorFlow, PaddlePaddle, MindSpore) have not been tested and are not guaranteed to work. The model operations rely on specific PyTorch sparse and broadcasting behaviors.
-- Note: `multi_gpu.py` is an experimental, pure PyTorch multi-GPU wrapper intended only for users with heavy Torch environments.
 
 ## Quick Start / Minimal Smoke Test
 
@@ -110,7 +108,7 @@ TL_BACKEND="torch" python defog_sample_only.py \
   --sample_steps 2 \
   --num_samples 2 \
   --gpu -1 \
-  --model_path checkpoints/last_model.npz
+  --save_dir ./checkpoints
 ```
 
 ## Advanced Examples
@@ -316,6 +314,7 @@ The parser-level defaults are generic. For named datasets, presets may replace t
 | `--rrwp_steps` | `12` | RRWP steps |
 | `--train_distortion` | `identity` | Training time distortion |
 | `--sample` | off | Run final sampling after training |
+| `--sample_only` | off | Skip training and sample from an existing checkpoint |
 | `--evaluate` | off | Evaluate generated graphs |
 | `--sample_steps` | `100` | Number of denoising steps |
 | `--sample_distortion` | `identity` | Sampling time distortion |
@@ -359,4 +358,5 @@ Typical outputs include:
 ## Notes
 
 - `defog_sample_only.py` must use model hyperparameters compatible with the saved checkpoint. If you rely on dataset presets, keep the dataset name consistent with the training run.
+- Validation and final-test FCD reference caches use separate filenames. Final evaluation uses the complete test split.
 - For reproducibility checks, prefer evaluating checkpoints produced by the current training code rather than mixing in older checkpoints created before the validation / checkpoint / metric-key fixes.

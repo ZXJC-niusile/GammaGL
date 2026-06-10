@@ -112,7 +112,8 @@ class GenericNodeTransform:
         return data
 
 
-def load_real_dataset(name, root=None, conditional=False, target='mu', remove_h=None):
+def load_real_dataset(name, root=None, conditional=False, target='mu',
+                      remove_h=None, use_defog_split=False):
     if name == 'planar':
         ds_cls = PlanarGraphDataset
         num_node_types, num_edge_types = 2, 2
@@ -157,6 +158,7 @@ def load_real_dataset(name, root=None, conditional=False, target='mu', remove_h=
     if name == 'qm9':
         kwargs['remove_h'] = True if remove_h is None else remove_h
         kwargs['aromatic'] = True
+        kwargs['use_defog_split'] = use_defog_split
     if name in ('qm9', 'tls') and conditional:
         kwargs['conditional'] = True
         kwargs['target'] = target

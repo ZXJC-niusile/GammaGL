@@ -99,6 +99,7 @@ class QM9Gen(InMemoryDataset):
     def __init__(self, root: Optional[str] = None, split: str = 'train',
                  remove_h: bool = True, aromatic: bool = True,
                  conditional: bool = False, target: str = 'mu',
+                 use_defog_split: bool = False,
                  transform: Optional[Callable] = None,
                  pre_transform: Optional[Callable] = None,
                  pre_filter: Optional[Callable] = None,
@@ -111,6 +112,7 @@ class QM9Gen(InMemoryDataset):
         self.aromatic = aromatic
         self.conditional = conditional
         self.target = target
+        self.use_defog_split = use_defog_split
 
         super().__init__(root, transform, pre_transform, pre_filter,
                          force_reload=force_reload)
@@ -121,9 +123,13 @@ class QM9Gen(InMemoryDataset):
     @property
     def processed_dir(self) -> str:
         h_tag = 'no_h' if self.remove_h else 'with_h'
+        split_tag = '_defog_split' if self.use_defog_split else ''
         if self.conditional:
-            return osp.join(self.root_dir, f'processed_{h_tag}_cond_{self.target}')
-        return osp.join(self.root_dir, f'processed_{h_tag}')
+            return osp.join(
+                self.root_dir,
+                f'processed_{h_tag}_cond_{self.target}{split_tag}',
+            )
+        return osp.join(self.root_dir, f'processed_{h_tag}{split_tag}')
 
     @property
     def raw_file_names(self) -> List[str]:
@@ -190,6 +196,7 @@ class QM9Gen(InMemoryDataset):
 
         # Process molecules
         data_list = []
+        source_indices = []
 
         for i, mol in enumerate(suppl):
             if i in skip or mol is None:
@@ -295,21 +302,54 @@ class QM9Gen(InMemoryDataset):
                     data = self.pre_transform(data)
 
                 data_list.append(data)
+                source_indices.append(i)
                 continue  # skip the else clause of the for loop
             # If an atom was not recognized, skip this molecule
             
-        # Perform dynamic random split (seed=42) after filtering dirty data
-        n_clean_samples = len(data_list)
-        n_train = min(100000, n_clean_samples)
-        n_test = min(int(0.1 * n_clean_samples), n_clean_samples - n_train)
-        n_val = max(0, n_clean_samples - n_train - n_test)
-
         rng = np.random.RandomState(42)
-        indices = rng.permutation(n_clean_samples)
-        
-        train_data = [data_list[i] for i in indices[:n_train]]
-        val_data = [data_list[i] for i in indices[n_train:n_train + n_val]]
-        test_data = [data_list[i] for i in indices[n_train + n_val:]]
+        if self.use_defog_split:
+            # Match the original DeFoG split: shuffle raw QM9 rows first, then
+            # filter uncharacterized/invalid molecules within each partition.
+            n_samples = len(target_df)
+            n_train = min(100000, n_samples)
+            n_test = min(int(0.1 * n_samples), n_samples - n_train)
+            n_val = max(0, n_samples - n_train - n_test)
+            raw_order = rng.permutation(n_samples)
+            train_ids = set(raw_order[:n_train].tolist())
+            val_ids = set(raw_order[n_train:n_train + n_val].tolist())
+            test_ids = set(raw_order[n_train + n_val:].tolist())
+
+            train_data = [
+                data for data, idx in zip(data_list, source_indices)
+                if idx in train_ids
+            ]
+            val_data = [
+                data for data, idx in zip(data_list, source_indices)
+                if idx in val_ids
+            ]
+            test_data = [
+                data for data, idx in zip(data_list, source_indices)
+                if idx in test_ids
+            ]
+        else:
+            # Legacy GammaGL split: filter first, then shuffle clean samples.
+            n_clean_samples = len(data_list)
+            n_train = min(100000, n_clean_samples)
+            n_test = min(
+                int(0.1 * n_clean_samples),
+                n_clean_samples - n_train,
+            )
+            n_val = max(0, n_clean_samples - n_train - n_test)
+            indices = rng.permutation(n_clean_samples)
+            train_data = [data_list[i] for i in indices[:n_train]]
+            val_data = [
+                data_list[i]
+                for i in indices[n_train:n_train + n_val]
+            ]
+            test_data = [
+                data_list[i]
+                for i in indices[n_train + n_val:]
+            ]
         
         split_data = {'train': train_data, 'val': val_data, 'test': test_data}
 

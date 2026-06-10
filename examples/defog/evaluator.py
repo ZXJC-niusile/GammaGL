@@ -133,7 +133,8 @@ def collect_train_smiles_molecular(train_graphs, atom_decoder):
 
 def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
                               dataset_infos, reference_graphs=None,
-                              train_graphs=None, cache_dir=None, cond_labels=None):
+                              train_graphs=None, cache_dir=None, cond_labels=None,
+                              reference_cache_tag='test_full'):
     """Full evaluation pipeline for generated graphs.
 
     For molecular datasets: computes validity, uniqueness, novelty, FCD, etc.
@@ -157,6 +158,9 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
         Training graphs (overrides `graphs` for SMILES collection).
     cache_dir : str, optional
         Directory for caching SMILES.
+    reference_cache_tag : str
+        Cache namespace for the reference split, such as ``val_200`` or
+        ``test_full``.
 
     Returns
     -------
@@ -173,7 +177,8 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
 
         # 1. Check in-memory cache
         train_smiles = dataset_infos.get('train_smiles')
-        reference_smiles = dataset_infos.get('reference_smiles')
+        reference_key = f'reference_smiles_{reference_cache_tag}'
+        reference_smiles = dataset_infos.get(reference_key)
 
         # 2. Check disk cache if not in memory
         cache_file = None
@@ -181,7 +186,10 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
         if cache_dir is not None:
             os.makedirs(cache_dir, exist_ok=True)
             cache_file = os.path.join(cache_dir, f"train_smiles_cache_{dataset_name}.pkl")
-            ref_cache_file = os.path.join(cache_dir, f"ref_smiles_cache_{dataset_name}.pkl")
+            ref_cache_file = os.path.join(
+                cache_dir,
+                f"ref_smiles_cache_{dataset_name}_{reference_cache_tag}.pkl",
+            )
 
         if train_smiles is None and cache_file is not None and os.path.exists(cache_file):
             import pickle
@@ -194,7 +202,7 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
             import pickle
             with open(ref_cache_file, 'rb') as f:
                 reference_smiles = pickle.load(f)
-            dataset_infos['reference_smiles'] = reference_smiles
+            dataset_infos[reference_key] = reference_smiles
             print(f"Loaded {len(reference_smiles)} reference SMILES from disk cache")
 
         if atom_decoder is not None and train_smiles is None:
@@ -217,7 +225,7 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
                 reference_smiles = collect_train_smiles_molecular(ref_graphs, atom_decoder)
             else:
                 reference_smiles = train_smiles
-            dataset_infos['reference_smiles'] = reference_smiles
+            dataset_infos[reference_key] = reference_smiles
             if ref_cache_file is not None:
                 import pickle
                 with open(ref_cache_file, 'wb') as f:

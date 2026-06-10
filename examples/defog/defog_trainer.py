@@ -160,7 +160,7 @@ _DATASET_PRESETS = {
         'hidden_mlp_X': 256,
         'hidden_mlp_E': 128,
         'hidden_mlp_y': 256,
-        'de': 128,
+        'de': 64,
         'dy': 128,
         'dim_ffX': 256,
         'dim_ffE': 128,
@@ -182,7 +182,7 @@ _DATASET_PRESETS = {
         'hidden_mlp_X': 256,
         'hidden_mlp_E': 128,
         'hidden_mlp_y': 256,
-        'de': 128,
+        'de': 64,
         'dy': 128,
         'dim_ffX': 256,
         'dim_ffE': 128,
@@ -279,6 +279,27 @@ def save_model_snapshot(model, ema, save_dir, prefix, output_dims=None):
             _json.dump({'output_dims': output_dims}, _f, indent=2)
 
     return model_path, ema_path
+
+
+def save_training_state(save_dir, best_score, best_epoch):
+    import json
+    state_path = os.path.join(save_dir, 'training_state.json')
+    with open(state_path, 'w') as f:
+        json.dump(
+            {'best_score': best_score, 'best_epoch': best_epoch},
+            f,
+            indent=2,
+        )
+
+
+def load_training_state(save_dir):
+    import json
+    state_path = os.path.join(save_dir, 'training_state.json')
+    if not os.path.exists(state_path):
+        return float('-inf'), None
+    with open(state_path, 'r') as f:
+        state = json.load(f)
+    return float(state.get('best_score', float('-inf'))), state.get('best_epoch')
 
 
 def load_model_snapshot_for_sampling(model, save_dir, ema_decay=0.0):
@@ -453,7 +474,8 @@ def main(args):
             args.dataset, root=args.data_root,
             conditional=getattr(args, 'conditional', False),
             target=getattr(args, 'target', 'mu'),
-            remove_h=getattr(args, 'remove_h', None))
+            remove_h=getattr(args, 'remove_h', None),
+            use_defog_split=getattr(args, 'use_defog_split', False))
         args.num_node_types = nt
         args.num_edge_types = et
 
@@ -692,8 +714,8 @@ def main(args):
         ema = EMA(model, decay=args.ema_decay)
         print(f"EMA enabled with decay={args.ema_decay}")
 
-    if args.sample:
-        print("\nSkipping training because --sample was specified.")
+    if args.sample_only:
+        print("\nSkipping training because --sample_only was specified.")
     else:
         # Resume from checkpoint if specified
         start_epoch = getattr(args, 'start_epoch', 0) or 0
@@ -717,6 +739,12 @@ def main(args):
         saved_checkpoints = []
         max_saved_checkpoints = 5
         val_counter = 0
+        best_score, best_epoch = load_training_state(args.save_dir)
+        if best_epoch is not None:
+            print(
+                f"Restored best validation score {best_score:.6f} "
+                f"from epoch {best_epoch}"
+            )
 
         for epoch in range(start_epoch, args.n_epochs):
             model.set_train()
@@ -851,6 +879,7 @@ def main(args):
                             train_graphs=graphs,
                             cache_dir=args.save_dir,
                             cond_labels=cond_labels,
+                            reference_cache_tag='val_200',
                         )
                     finally:
                         if ema is not None:
@@ -871,6 +900,32 @@ def main(args):
                         if os.path.exists(old_ema_path):
                             os.remove(old_ema_path)
                         print(f"  Removed old checkpoint {old_prefix}")
+
+                    selection_score = float(
+                        val_metrics.get(
+                            'selection_score',
+                            compute_selection_score(args.dataset, val_metrics),
+                        )
+                    )
+                    if selection_score > best_score:
+                        best_score = selection_score
+                        best_epoch = epoch + 1
+                        save_model_snapshot(
+                            model,
+                            ema,
+                            args.save_dir,
+                            'best',
+                            output_dims,
+                        )
+                        save_training_state(
+                            args.save_dir,
+                            best_score,
+                            best_epoch,
+                        )
+                        print(
+                            f"  New best checkpoint at epoch {best_epoch}: "
+                            f"selection_score={best_score:.6f}"
+                        )
 
         save_model_snapshot(model, ema, args.save_dir, 'last', output_dims)
         print("\nTraining complete. Last snapshot saved.")
@@ -963,6 +1018,7 @@ def main(args):
                     dataset_infos,
                     cache_dir=args.save_dir,
                     cond_labels=cond_labels,
+                    reference_cache_tag='test_full',
                 )
                 all_fold_metrics.append(fold_metrics)
 
@@ -1050,7 +1106,16 @@ if __name__ == '__main__':
     parser.add_argument('--train_distortion', type=str, default='identity')
 
     # Sampling
-    parser.add_argument('--sample', action='store_true')
+    parser.add_argument(
+        '--sample',
+        action='store_true',
+        help='Run final sampling after training',
+    )
+    parser.add_argument(
+        '--sample_only',
+        action='store_true',
+        help='Skip training and sample from best_model.npz or last_model.npz',
+    )
     parser.add_argument('--evaluate', action='store_true',
                         help='Evaluate generated graphs (molecular or synthetic metrics)')
     parser.add_argument('--sample_steps', type=int, default=100)
@@ -1084,6 +1149,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     args = apply_dataset_preset(args, parser)
+    if args.sample_only:
+        args.sample = True
 
     # Set random seed
     np.random.seed(args.seed)
