@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import tensorlayerx as tlx
 from gammagl.utils import to_dense_adj, to_dense_batch
@@ -49,7 +48,7 @@ def apply_node_mask(X, E, node_mask):
     return X_masked, E_masked
 
 
-def to_dense(x, edge_index, edge_attr, batch, num_nodes=None):
+def to_dense(x, edge_index, edge_attr, batch):
     r"""Convert sparse graph to dense representation.
 
     Parameters
