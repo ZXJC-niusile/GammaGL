@@ -30,6 +30,10 @@ from .acm4rohe import ACM4Rohe
 from .actor import Actor
 from .deezer_europe import DeezerEurope
 from .ADDataset import ADDataset
+from .spectre import (
+    SpectreGraphDataset, PlanarGraphDataset, TreeGraphDataset,
+    SBMGraphDataset, Comm20GraphDataset,
+)
 
 __all__ = [
     'ACM4HeCo',
@@ -62,7 +66,12 @@ __all__ = [
     'ACM4Rohe',
     'Actor',
     'DeezerEurope',
-    'ADDataset'
+    'ADDataset',
+    'SpectreGraphDataset',
+    'PlanarGraphDataset',
+    'TreeGraphDataset',
+    'SBMGraphDataset',
+    'Comm20GraphDataset',
 ]
 
 classes = __all__
