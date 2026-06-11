@@ -1,26 +1,27 @@
 import math
+import torch
 import tensorlayerx as tlx
 from gammagl.layers.attention.defog_layer import XEyTransformerLayer
 
 
 def _timestep_embedding(timesteps, dim, max_period=10000):
     r"""Sinusoidal timestep embedding (internal helper)."""
-    import numpy as np
     half = dim // 2
-    freqs = np.exp(-math.log(max_period) * np.arange(0, half, dtype=np.float32) / half)
-    freqs = tlx.convert_to_tensor(freqs)
-
-    ts = tlx.cast(tlx.reshape(timesteps, [-1, 1]), tlx.float32)
-    freqs = tlx.reshape(freqs, [1, -1])
+    freqs = torch.exp(
+        -math.log(max_period)
+        * torch.arange(half, dtype=torch.float32, device=timesteps.device)
+        / half
+    )
+    ts = timesteps.reshape(-1, 1).to(torch.float32)
     args = ts * freqs
-
-    cos_part = tlx.cos(args)
-    sin_part = tlx.sin(args)
-    embedding = tlx.concat([cos_part, sin_part], axis=-1)
+    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
 
     if dim % 2 == 1:
-        zeros_pad = tlx.zeros([embedding.shape[0], 1], dtype=tlx.float32)
-        embedding = tlx.concat([embedding, zeros_pad], axis=-1)
+        zeros_pad = torch.zeros(
+            (embedding.shape[0], 1), dtype=embedding.dtype,
+            device=embedding.device
+        )
+        embedding = torch.cat([embedding, zeros_pad], dim=-1)
 
     return embedding
 
@@ -150,11 +151,9 @@ class DeFoGModel(tlx.nn.Module):
         n = X.shape[1]
 
         # Diagonal mask for edges (zero out self-loops)
-        eye_n = tlx.cast(tlx.eye(n), tlx.bool)
-        diag_mask = tlx.cast(
-            ~tlx.tile(tlx.reshape(eye_n, [1, n, n, 1]), [bs, 1, 1, 1]),
-            X.dtype
-        )
+        diag_mask = (~torch.eye(n, dtype=torch.bool, device=X.device)).reshape(
+            1, n, n, 1
+        ).expand(bs, -1, -1, -1).to(X.dtype)
 
         # Skip connections from input
         X_to_out = X[..., :self.out_dim_X]
