@@ -19,18 +19,13 @@ def masked_softmax(x, mask, dim=-1):
     tensor
         Softmax output with masked positions zeroed.
     """
-    mask_sum = float(tlx.convert_to_numpy(tlx.reduce_sum(tlx.cast(mask, tlx.float32))))
-
-    if mask_sum == 0:
-        return x
-
     mask_float = tlx.cast(mask, x.dtype)
     while len(mask_float.shape) < len(x.shape):
         mask_float = tlx.expand_dims(mask_float, axis=-1)
 
     neg_inf = tlx.zeros_like(x) - 1e9
     x_masked = tlx.where(mask_float > 0.5, x, neg_inf)
-    return tlx.softmax(x_masked, axis=dim)
+    return tlx.softmax(x_masked, axis=dim) * mask_float
 
 
 class Xtoy(tlx.nn.Module):
