@@ -63,7 +63,7 @@ Best-checkpoint selection is validation-driven:
 2. run validation sampling
 3. evaluate generated graphs
 4. compute `selection_score`
-5. update `best` if the validation score improves
+5. update `best` only when the score is finite and strictly improves
 
 Sampling prefers `best_model.npz`; if it does not exist, it falls back to `last_model.npz`.
 
@@ -140,31 +140,6 @@ for seed in 43 44 45; do
     --evaluate
 done
 
-## Dependency Management
-To keep GammaGL lightweight, DeFoG evaluates synthetic graphs and molecules using specialized external libraries which are **not** installed by default.
-
-### Optional Evaluation Dependencies
-If you want to perform full evaluation on `spectre` or molecular datasets (`qm9`, `zinc250k`):
-```bash
-# For synthetic graph evaluation (SPECTRE)
-pip install pyemd scipy networkx
-
-# For molecular evaluation (QM9, ZINC250k)
-pip install rdkit fcd
-```
-If these dependencies are missing, the training will still run normally but the evaluation metrics will be skipped and output `-1` or `NaN`.
-
-## Minimal CPU Smoke Test
-You can verify the model is functioning correctly without any heavy dependencies by running a minimal smoke test on a small synthetic dataset:
-```bash
-TL_BACKEND="torch" python defog_trainer.py --dataset synthetic --n_epochs 1 --batch_size 2 --sample --sample_steps 2 --num_graphs 4 --n_layers 2 --gpu -1 --data_root ./_review_data --save_dir ./_review_outputs
-```
-Expected output will show the dataset building dynamically and the loss being printed, followed by completion without crashing. Alternatively, you can run the provided smoke test script:
-```bash
-python tests/models/test_defog_smoke.py
-```
-This ensures that the GammaGL core layers and flow matching engine are backend-neutral and do not suffer from any hard `torch` or `rdkit` import issues.
-
 # Tree / SBM training with preset hyperparameters
 TL_BACKEND="torch" python defog_trainer.py --dataset tree --data_root ./datasets --sample --evaluate
 TL_BACKEND="torch" python defog_trainer.py --dataset sbm --data_root ./datasets --sample --evaluate
@@ -198,6 +173,23 @@ TL_BACKEND="torch" python defog_sample_only.py \
   --num_sample_fold 3 \
   --evaluate
 ```
+
+## Reproduction Readiness
+
+Run the engineering audit from the repository root:
+
+```bash
+TL_BACKEND=torch python examples/defog/reproduction_audit.py
+TL_BACKEND=torch python examples/defog/reproduction_audit.py --tests --smoke
+```
+
+The audit checks repository integration, paper presets, dependencies, the algorithm-test inventory, and the synthetic end-to-end path. It deliberately does **not** claim paper-level reproduction: full datasets, matching checkpoints, folds, and metric agreement remain experimental checks.
+
+Current status:
+
+- Planar, Tree, and QM9 runs are recorded below.
+- ZINC metrics require final protocol-aligned comparison.
+- SBM evaluation now runs with `graph-tool`, but the observed validity is 5% (2/40) at epoch 48000 versus about 90% in the paper. Treat SBM as an open reproduction gap, not a completed result.
 
 ## Benchmark Results
 
@@ -293,7 +285,8 @@ The parser-level defaults are generic. For named datasets, presets may replace t
 | `--dataset` | `synthetic` | Dataset name |
 | `--data_root` | `None` | Root directory for real datasets |
 | `--seed` | `42` | Random seed |
-| `--use_defog_split` | off | Use DeFoG original CSV split for QM9 instead of random split |
+| `--use_defog_split` | on for QM9 preset | Use the original DeFoG raw-row split |
+| `--legacy_qm9_split` | off | Opt into the previous clean-sample GammaGL split |
 | `--remove_h` / `--with_h` | `None` | Use QM9 without/with hydrogens |
 | `--conditional` | off | Enable classifier-free guidance (QM9 only) |
 | `--target` | `mu` | Conditional target: `mu` / `homo` / `both` / `k2` |
@@ -358,5 +351,7 @@ Typical outputs include:
 ## Notes
 
 - `defog_sample_only.py` must use model hyperparameters compatible with the saved checkpoint. If you rely on dataset presets, keep the dataset name consistent with the training run.
-- Validation and final-test FCD reference caches use separate filenames. Final evaluation uses the complete test split.
+- Validation and final-test FCD reference caches use separate filenames. QM9 caches also separate no-H and with-H configurations.
+- `--sample_batch_size` changes memory usage only: conditional labels and node counts retain their original order across chunks.
+- ZINC uses the original held-out index set for both validation and test, disjoint from training.
 - For reproducibility checks, prefer evaluating checkpoints produced by the current training code rather than mixing in older checkpoints created before the validation / checkpoint / metric-key fixes.
