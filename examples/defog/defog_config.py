@@ -85,6 +85,7 @@ _DATASET_PRESETS = {
         'val_num_samples': 40,
     },
     'qm9': {
+        'use_defog_split': True,
         'n_layers': 9,
         'n_epochs': 1000,
         'batch_size': 1024,
