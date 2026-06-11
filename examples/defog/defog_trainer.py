@@ -34,85 +34,8 @@ from train_metrics import TrainLossDiscrete
 from sampler import sample_batch
 from evaluator import evaluate_generated_graphs, compute_selection_score
 from defog_config import apply_dataset_preset
+import defog_checkpoint as checkpoint
 
-
-
-# ============================================================
-# Checkpoint helpers
-# ============================================================
-
-def save_model_snapshot(model, ema, save_dir, prefix, output_dims=None):
-    model_path = os.path.join(save_dir, f'{prefix}_model.npz')
-    ema_path = os.path.join(save_dir, f'{prefix}_ema.pkl')
-    model.save_weights(model_path, format='npz_dict')
-
-    if ema is not None:
-        with open(ema_path, 'wb') as f:
-            f.write(ema.state_dict())
-    elif os.path.exists(ema_path):
-        os.remove(ema_path)
-
-    # Save output_dims for reproducibility when loading for sampling
-    if output_dims is not None:
-        import json as _json
-        config_path = os.path.join(save_dir, 'model_config.json')
-        with open(config_path, 'w') as _f:
-            _json.dump({'output_dims': output_dims}, _f, indent=2)
-
-    return model_path, ema_path
-
-
-def save_training_state(save_dir, best_score, best_epoch):
-    import json
-    state_path = os.path.join(save_dir, 'training_state.json')
-    with open(state_path, 'w') as f:
-        json.dump(
-            {'best_score': best_score, 'best_epoch': best_epoch},
-            f,
-            indent=2,
-        )
-
-
-def load_training_state(save_dir):
-    import json
-    state_path = os.path.join(save_dir, 'training_state.json')
-    if not os.path.exists(state_path):
-        return float('-inf'), None
-    with open(state_path, 'r') as f:
-        state = json.load(f)
-    return float(state.get('best_score', float('-inf'))), state.get('best_epoch')
-
-
-def load_model_snapshot_for_sampling(model, save_dir, ema_decay=0.0):
-    prefixes = ['best', 'last']
-    chosen_prefix = None
-    model_path = None
-
-    for prefix in prefixes:
-        candidate = os.path.join(save_dir, f'{prefix}_model.npz')
-        if os.path.exists(candidate):
-            chosen_prefix = prefix
-            model_path = candidate
-            break
-
-    if model_path is None:
-        raise FileNotFoundError(
-            f"No sampling checkpoint found in {save_dir}. Expected best_model.npz or last_model.npz"
-        )
-
-    model.load_weights(model_path, format='npz_dict')
-    print(f"Loaded model from {model_path}")
-
-    ema = None
-    ema_path = os.path.join(save_dir, f'{chosen_prefix}_ema.pkl')
-    if os.path.exists(ema_path):
-        ema = EMA(model, decay=max(float(ema_decay), 0.999))
-        with open(ema_path, 'rb') as f:
-            ema.load_state_dict(f.read())
-        ema.swap_in(model)
-        print(f"  Using EMA weights from {ema_path}")
-
-    return model_path, ema
 
 
 # ============================================================
@@ -501,18 +424,15 @@ def main(args):
         # Resume from checkpoint if specified
         start_epoch = getattr(args, 'start_epoch', 0) or 0
         if args.resume_from:
-            ckpt_path = os.path.join(args.resume_from, 'last_model.npz')
-            ema_path = os.path.join(args.resume_from, 'last_ema.pkl')
-            if not os.path.exists(ckpt_path):
-                ckpt_path = os.path.join(args.resume_from, 'best_model.npz')
-                ema_path = os.path.join(args.resume_from, 'best_ema.pkl')
-            if os.path.exists(ckpt_path):
-                model.load_weights(ckpt_path, format='npz_dict')
+            ckpt_path, ema = checkpoint.load_snapshot(
+                model,
+                args.resume_from,
+                prefixes=('last', 'best'),
+                ema=ema,
+                required=False,
+            )
+            if ckpt_path is not None:
                 print(f"Resumed model weights from {ckpt_path}, starting at epoch {start_epoch}")
-                if ema is not None and os.path.exists(ema_path):
-                    with open(ema_path, 'rb') as f:
-                        ema.load_state_dict(f.read())
-                    print(f"Resumed EMA weights from {ema_path}")
             else:
                 print(f"WARNING: --resume_from={args.resume_from} but no checkpoint found, training from scratch")
 
@@ -520,7 +440,7 @@ def main(args):
         saved_checkpoints = []
         max_saved_checkpoints = 5
         val_counter = 0
-        best_score, best_epoch = load_training_state(args.save_dir)
+        best_score, best_epoch = checkpoint.load_training_state(args.save_dir)
         if best_epoch is not None:
             print(
                 f"Restored best validation score {best_score:.6f} "
@@ -592,7 +512,7 @@ def main(args):
 
             if should_validate:
                 val_counter += 1
-                save_model_snapshot(model, ema, args.save_dir, 'last', output_dims)
+                checkpoint.save_snapshot(model, ema, args.save_dir, 'last', output_dims)
 
                 if args.sample_every_val > 0 and val_counter % args.sample_every_val == 0:
                     print(f"\nValidation sampling at epoch {epoch + 1}...")
@@ -668,18 +588,13 @@ def main(args):
 
                     # Save rolling N checkpoints instead of relying on selection_score
                     ckpt_prefix = f'epoch_{epoch + 1}'
-                    save_model_snapshot(model, ema, args.save_dir, ckpt_prefix, output_dims)
+                    checkpoint.save_snapshot(model, ema, args.save_dir, ckpt_prefix, output_dims)
                     saved_checkpoints.append(ckpt_prefix)
                     print(f"  Saved checkpoint at epoch {epoch + 1}")
                     
                     if len(saved_checkpoints) > max_saved_checkpoints:
                         old_prefix = saved_checkpoints.pop(0)
-                        old_model_path = os.path.join(args.save_dir, f'{old_prefix}_model.npz')
-                        old_ema_path = os.path.join(args.save_dir, f'{old_prefix}_ema.pkl')
-                        if os.path.exists(old_model_path):
-                            os.remove(old_model_path)
-                        if os.path.exists(old_ema_path):
-                            os.remove(old_ema_path)
+                        checkpoint.delete_snapshot(args.save_dir, old_prefix)
                         print(f"  Removed old checkpoint {old_prefix}")
 
                     selection_score = float(
@@ -691,14 +606,14 @@ def main(args):
                     if selection_score > best_score:
                         best_score = selection_score
                         best_epoch = epoch + 1
-                        save_model_snapshot(
+                        checkpoint.save_snapshot(
                             model,
                             ema,
                             args.save_dir,
                             'best',
                             output_dims,
                         )
-                        save_training_state(
+                        checkpoint.save_training_state(
                             args.save_dir,
                             best_score,
                             best_epoch,
@@ -708,13 +623,19 @@ def main(args):
                             f"selection_score={best_score:.6f}"
                         )
 
-        save_model_snapshot(model, ema, args.save_dir, 'last', output_dims)
+        checkpoint.save_snapshot(model, ema, args.save_dir, 'last', output_dims)
         print("\nTraining complete. Last snapshot saved.")
 
     # ------- Sampling & Evaluation -------
     if args.sample:
-        _, sampling_ema = load_model_snapshot_for_sampling(
-            model, args.save_dir, ema_decay=args.ema_decay)
+        model_path, sampling_ema = checkpoint.load_snapshot(
+            model,
+            args.save_dir,
+            prefixes=('best', 'last'),
+            ema_decay=args.ema_decay,
+            swap_ema=True,
+        )
+        print(f"Loaded model from {model_path}")
 
         num_folds = max(1, args.num_sample_fold)
         all_fold_metrics = []
