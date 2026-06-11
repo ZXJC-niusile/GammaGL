@@ -730,47 +730,34 @@ class ChargeFeature:
         self.remove_h = remove_h
         if valencies is None:
             valencies = [4, 3, 2, 1]
-        self.valencies = np.array(valencies, dtype=np.float32)
+        self.valencies = list(valencies)
 
     def __call__(self, noisy_data):
-        X = tlx.convert_to_numpy(noisy_data['X_t'])
-        E = tlx.convert_to_numpy(noisy_data['E_t'])
+        X = noisy_data['X_t']
+        E = noisy_data['E_t']
         dx = X.shape[-1]
         de = E.shape[-1]
 
-        if de == 5:
-            bond_orders = np.array([0, 1, 2, 3, 1.5], dtype=np.float32).reshape(1, 1, 1, -1)
-        else:
-            bond_orders = np.array([0, 1, 2, 3], dtype=np.float32).reshape(1, 1, 1, -1)
+        bond_orders = [0, 1, 2, 3, 1.5] if de == 5 else [0, 1, 2, 3]
+        bond_orders = E.new_tensor(bond_orders).reshape(1, 1, 1, -1)
+        current_valencies = (E * bond_orders).argmax(dim=-1).sum(dim=-1)
 
-        weighted_E = E * bond_orders
-        current_valencies = np.argmax(weighted_E, axis=-1).sum(axis=-1).astype(np.float32)
+        valencies = self.valencies + [0] * max(0, dx - len(self.valencies))
+        valencies = X.new_tensor(valencies).reshape(1, 1, -1)
+        normal_valencies = (X * valencies).argmax(dim=-1)
 
-        valencies = self.valencies
-        if len(valencies) < dx:
-            valencies = np.pad(valencies, (0, dx - len(valencies)))
-        valencies = valencies.reshape(1, 1, -1)
-        weighted_X = X * valencies
-        normal_valencies = np.argmax(weighted_X, axis=-1).astype(np.float32)
-
-        charge = (normal_valencies - current_valencies).astype(np.float32)
-        return tlx.convert_to_tensor(charge)
+        return (normal_valencies - current_valencies).to(X.dtype)
 
 
 class ValencyFeature:
     r"""Compute per-node valency using the original DeFoG molecular feature logic."""
     def __call__(self, noisy_data):
-        E = tlx.convert_to_numpy(noisy_data['E_t'])
+        E = noisy_data['E_t']
         de = E.shape[-1]
 
-        if de == 5:
-            bond_orders = np.array([0, 1, 2, 3, 1.5], dtype=np.float32).reshape(1, 1, 1, -1)
-        else:
-            bond_orders = np.array([0, 1, 2, 3], dtype=np.float32).reshape(1, 1, 1, -1)
-
-        weighted_E = E * bond_orders
-        valencies = np.argmax(weighted_E, axis=-1).sum(axis=-1).astype(np.float32)
-        return tlx.convert_to_tensor(valencies)
+        bond_orders = [0, 1, 2, 3, 1.5] if de == 5 else [0, 1, 2, 3]
+        bond_orders = E.new_tensor(bond_orders).reshape(1, 1, 1, -1)
+        return (E * bond_orders).argmax(dim=-1).sum(dim=-1).to(E.dtype)
 
 
 class WeightFeature:
@@ -789,21 +776,18 @@ class WeightFeature:
             atom_weights = [12.0, 14.0, 16.0, 19.0]
         if isinstance(atom_weights, dict):
             atom_weights = [atom_weights[k] for k in sorted(atom_weights.keys())]
-        self.atom_weights = np.array(atom_weights, dtype=np.float32)
+        self.atom_weights = list(atom_weights)
 
     def __call__(self, noisy_data):
-        X = tlx.convert_to_numpy(noisy_data['X_t'])
-        bs, n, dx = X.shape
+        X = noisy_data['X_t']
+        dx = X.shape[-1]
 
-        atom_types = np.argmax(X, axis=-1)
-        aw = self.atom_weights
-        if len(aw) < dx:
-            aw = np.pad(aw, (0, dx - len(aw)))
-
-        weights = aw[atom_types]
-        mol_weight = np.sum(weights, axis=1, keepdims=True).astype(np.float32)
-        mol_weight = mol_weight / self.max_weight
-        return tlx.convert_to_tensor(mol_weight)
+        atom_weights = self.atom_weights + [0] * max(
+            0, dx - len(self.atom_weights)
+        )
+        atom_weights = X.new_tensor(atom_weights)
+        weights = atom_weights[X.argmax(dim=-1)]
+        return weights.sum(dim=1, keepdim=True) / self.max_weight
 
 
 class ExtraMolecularFeatures:
@@ -847,7 +831,7 @@ class ExtraMolecularFeatures:
                 tlx.expand_dims(charge, axis=-1),
                 tlx.expand_dims(valency, axis=-1),
             ], axis=-1),
-            E=tlx.zeros([bs, n, n, 0], dtype=tlx.float32),
+            E=charge.new_zeros((bs, n, n, 0)),
             y=weight,
         )
 
