@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import tensorlayerx as tlx
 from gammagl.utils import to_dense_adj, to_dense_batch
 
@@ -122,8 +123,9 @@ def encode_no_edge(E):
     E = tlx.concat([E[..., :1] + no_edge, E[..., 1:]], axis=-1)
 
     n = E.shape[1]
-    diagonal = tlx.expand_dims(tlx.eye(n, dtype=E.dtype), axis=0)
-    diagonal = tlx.expand_dims(diagonal, axis=-1)
+    diagonal = torch.eye(n, dtype=E.dtype, device=E.device).reshape(
+        1, n, n, 1
+    )
     return E * (1.0 - diagonal)
 
 
