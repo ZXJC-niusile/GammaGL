@@ -6,10 +6,30 @@ synthetic graph metrics (SPECTRE MMD-based statistics).
 """
 
 import os
+import re
 import numpy as np
 import tensorlayerx as tlx
 
 from rdkit_functions import compute_molecular_metrics
+
+
+def smiles_cache_paths(cache_dir, dataset_name, reference_cache_tag,
+                        dataset_infos):
+    r"""Build isolated train/reference SMILES cache paths."""
+    dataset_tag = dataset_name
+    if dataset_name == 'qm9':
+        hydrogen_tag = 'no_h' if dataset_infos.get('remove_h', True) else 'with_h'
+        dataset_tag = f'{dataset_name}_{hydrogen_tag}'
+    safe_reference_tag = re.sub(
+        r'[^A-Za-z0-9_.-]+', '_', str(reference_cache_tag)
+    ).strip('._') or 'reference'
+    return (
+        os.path.join(cache_dir, f'train_smiles_cache_{dataset_tag}.pkl'),
+        os.path.join(
+            cache_dir,
+            f'ref_smiles_cache_{dataset_tag}_{safe_reference_tag}.pkl',
+        ),
+    )
 
 
 def compute_selection_score(dataset_name, metrics):
@@ -185,10 +205,11 @@ def evaluate_generated_graphs(generated, dataset_name, graphs, test_ds,
         ref_cache_file = None
         if cache_dir is not None:
             os.makedirs(cache_dir, exist_ok=True)
-            cache_file = os.path.join(cache_dir, f"train_smiles_cache_{dataset_name}.pkl")
-            ref_cache_file = os.path.join(
+            cache_file, ref_cache_file = smiles_cache_paths(
                 cache_dir,
-                f"ref_smiles_cache_{dataset_name}_{reference_cache_tag}.pkl",
+                dataset_name,
+                reference_cache_tag,
+                dataset_infos,
             )
 
         if train_smiles is None and cache_file is not None and os.path.exists(cache_file):
