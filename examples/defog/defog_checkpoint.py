@@ -1,6 +1,7 @@
 """Checkpoint I/O for the DeFoG example."""
 
 import json
+import math
 import os
 
 from defog_utils import EMA
@@ -73,3 +74,15 @@ def load_training_state(save_dir):
     with open(path, 'r') as f:
         state = json.load(f)
     return float(state.get('best_score', float('-inf'))), state.get('best_epoch')
+
+
+def save_best_if_improved(model, ema, save_dir, score, epoch,
+                          best_score, best_epoch, output_dims=None):
+    r"""Persist a new best snapshot only for a finite strict improvement."""
+    score = float(score)
+    if not math.isfinite(score) or score <= best_score:
+        return best_score, best_epoch, False
+
+    save_snapshot(model, ema, save_dir, 'best', output_dims)
+    save_training_state(save_dir, score, epoch)
+    return score, epoch, True

@@ -565,21 +565,19 @@ def main(args):
                             compute_selection_score(args.dataset, val_metrics),
                         )
                     )
-                    if selection_score > best_score:
-                        best_score = selection_score
-                        best_epoch = epoch + 1
-                        checkpoint.save_snapshot(
+                    best_score, best_epoch, improved = (
+                        checkpoint.save_best_if_improved(
                             model,
                             ema,
                             args.save_dir,
-                            'best',
-                            output_dims,
-                        )
-                        checkpoint.save_training_state(
-                            args.save_dir,
+                            selection_score,
+                            epoch + 1,
                             best_score,
                             best_epoch,
+                            output_dims,
                         )
+                    )
+                    if improved:
                         print(
                             f"  New best checkpoint at epoch {best_epoch}: "
                             f"selection_score={best_score:.6f}"
