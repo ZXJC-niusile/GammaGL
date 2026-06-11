@@ -706,15 +706,6 @@ def compute_extra_data(noisy_data, extra_features, domain_features, noise_dist):
 
     return DenseFeaturePlaceHolder(X=extra_X, E=extra_E, y=extra_y)
 
-import numpy as np
-import tensorlayerx as tlx
-class DenseFeaturePlaceHolder:
-    def __init__(self, X, E, y):
-        self.X = X
-        self.E = E
-        self.y = y
-
-
 
 class ChargeFeature:
     r"""Compute per-node charge using the original DeFoG molecular feature logic.
