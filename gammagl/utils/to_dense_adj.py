@@ -2,7 +2,6 @@ import tensorlayerx as tlx
 from gammagl.mpops import unsorted_segment_sum
 
 
-# TODO: this function is not work in pytest
 def to_dense_adj(
     edge_index,
     batch = None,
@@ -14,10 +13,28 @@ def to_dense_adj(
         num_nodes = int(tlx.reduce_max(edge_index)) + 1 if tlx.numel(edge_index) > 0 else 0
         batch = tlx.zeros([num_nodes], dtype=tlx.int64)
 
+    if tlx.BACKEND == 'torch':
+        import torch
+
+        target_device = edge_attr.device if edge_attr is not None else batch.device
+        batch = batch.to(target_device)
+        edge_index = edge_index.to(target_device)
+
     batch_size = int(tlx.reduce_max(batch)) + 1 if tlx.numel(batch) > 0 else 1
-    one = tlx.ones(shape=(batch.size(0),), dtype=tlx.float32)
-    num_nodes = tlx.cast(unsorted_segment_sum(one, batch, batch_size), dtype=tlx.int64)
-    cum_nodes = tlx.concat([tlx.zeros([1],dtype=tlx.int64), tlx.cumsum(num_nodes)])
+    if tlx.BACKEND == 'torch':
+        num_nodes = torch.bincount(batch, minlength=batch_size)
+        cum_nodes = torch.cat([
+            torch.zeros(1, dtype=batch.dtype, device=batch.device),
+            torch.cumsum(num_nodes, dim=0),
+        ])
+    else:
+        one = tlx.ones(shape=(batch.shape[0],), dtype=tlx.float32)
+        num_nodes = tlx.cast(
+            unsorted_segment_sum(one, batch, batch_size), dtype=tlx.int64
+        )
+        cum_nodes = tlx.concat([
+            tlx.zeros([1], dtype=tlx.int64), tlx.cumsum(num_nodes)
+        ])
 
     idx0 = batch[edge_index[0]]
     idx1 = edge_index[0] - cum_nodes[batch][edge_index[0]]
@@ -38,11 +55,11 @@ def to_dense_adj(
 
     size = [batch_size, max_num_nodes, max_num_nodes]
     size += tlx.get_tensor_shape(edge_attr)[1: ]
-    adj = tlx.zeros(size, dtype=tlx.int64)
     flattened_size = batch_size * max_num_nodes * max_num_nodes
-    adj = tlx.reshape(adj, [flattened_size] + tlx.get_tensor_shape(adj)[3: ])
     idx = idx0 * max_num_nodes * max_num_nodes + idx1 * max_num_nodes + idx2
-    adj = unsorted_segment_sum(edge_attr, idx)
+    adj = unsorted_segment_sum(
+        edge_attr, idx, num_segments=flattened_size
+    )
     adj = tlx.reshape(adj, size)
 
     return adj
