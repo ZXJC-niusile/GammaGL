@@ -35,6 +35,7 @@ from sampler import sample_batch
 from evaluator import evaluate_generated_graphs, compute_selection_score
 from defog_config import apply_dataset_preset
 import defog_checkpoint as checkpoint
+from defog_optimizer import TorchAdamW
 
 
 
@@ -320,52 +321,13 @@ def main(args):
     )
 
     # ------- Optimizer -------
-    import torch as _torch
-
-    # AdamW wrapper: provides the tlx.optimizers interface around torch.optim.AdamW
-    # with NaN/Inf gradient sanitization.
-    class _AdamWWrapper(tlx.optimizers.Adam):
-        def __init__(self, lr, weight_decay, amsgrad, grad_clip=None):
-            self.amsgrad = amsgrad
-            super().__init__(lr=lr, weight_decay=weight_decay, grad_clip=grad_clip)
-        def gradient(self, loss, weights=None, return_grad=True):
-            if weights is None:
-                raise AttributeError("Parameter train_weights must be entered.")
-            if not self.init_optim:
-                self.optimizer_adam = _torch.optim.AdamW(
-                    params=weights, lr=self.lr,
-                    betas=(self.beta_1, self.beta_2), eps=self.eps,
-                    weight_decay=self.weight_decay, amsgrad=self.amsgrad)
-                self.init_optim = True
-            self.optimizer_adam.zero_grad()
-            if not _torch.isfinite(loss):
-                print("[warn:optim] Non-finite loss; skipping step", flush=True)
-                return [_torch.zeros_like(w) for w in weights] if return_grad else None
-            loss.backward()
-            for w in weights:
-                if w.grad is not None and not _torch.isfinite(w.grad).all():
-                    w.grad.data = _torch.nan_to_num(w.grad.data, nan=0.0, posinf=0.0, neginf=0.0)
-            if self.grad_clip is not None:
-                gn = self.grad_clip(weights)
-                if isinstance(gn, _torch.Tensor) and not _torch.isfinite(gn):
-                    for w in weights:
-                        if w.grad is not None:
-                            w.grad.zero_()
-            return [w.grad for w in weights] if return_grad else None
-        def apply_gradients(self, grads_and_vars=None, closure=None):
-            if not self.init_optim:
-                raise AttributeError("Call gradient() first.")
-            return self.optimizer_adam.step(closure) if closure else self.optimizer_adam.step()
-
-    optimizer = _AdamWWrapper(
+    optimizer = TorchAdamW(
         lr=args.lr,
         weight_decay=args.weight_decay,
         amsgrad=True,
+        grad_clip_norm=args.grad_clip_norm,
     )
 
-    if args.grad_clip_norm is not None:
-        optimizer.grad_clip = lambda weights: _torch.nn.utils.clip_grad_norm_(
-            [w for w in weights], max_norm=args.grad_clip_norm)
     print("[debug] Creating TrainOneStep...")
     train_one_step = TrainOneStep(loss_wrapper, optimizer, model.trainable_weights)
     print("[debug] TrainOneStep created")
