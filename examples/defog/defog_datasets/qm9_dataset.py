@@ -11,6 +11,21 @@ from gammagl.data import (
     extract_zip,
 )
 
+def build_qm9_split_ids(n_samples, seed=42):
+    r"""Return the original DeFoG raw-row QM9 partitions."""
+    if n_samples < 0:
+        raise ValueError('n_samples must be non-negative')
+    n_train = min(100000, n_samples)
+    n_test = min(int(0.1 * n_samples), n_samples - n_train)
+    n_val = n_samples - n_train - n_test
+    order = np.random.RandomState(seed).permutation(n_samples)
+    return {
+        'train': order[:n_train],
+        'val': order[n_train:n_train + n_val],
+        'test': order[n_train + n_val:],
+    }
+
+
 
 class QM9Gen(InMemoryDataset):
     r"""The QM9 dataset for graph generation, following the DeFoG setup.
@@ -310,14 +325,10 @@ class QM9Gen(InMemoryDataset):
         if self.use_defog_split:
             # Match the original DeFoG split: shuffle raw QM9 rows first, then
             # filter uncharacterized/invalid molecules within each partition.
-            n_samples = len(target_df)
-            n_train = min(100000, n_samples)
-            n_test = min(int(0.1 * n_samples), n_samples - n_train)
-            n_val = max(0, n_samples - n_train - n_test)
-            raw_order = rng.permutation(n_samples)
-            train_ids = set(raw_order[:n_train].tolist())
-            val_ids = set(raw_order[n_train:n_train + n_val].tolist())
-            test_ids = set(raw_order[n_train + n_val:].tolist())
+            split_ids = build_qm9_split_ids(len(target_df))
+            train_ids = set(split_ids['train'].tolist())
+            val_ids = set(split_ids['val'].tolist())
+            test_ids = set(split_ids['test'].tolist())
 
             train_data = [
                 data for data, idx in zip(data_list, source_indices)

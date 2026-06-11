@@ -674,8 +674,16 @@ if __name__ == '__main__':
     qm9_h_group.add_argument('--with_h', dest='remove_h', action='store_false',
                              help='Use QM9 with hydrogens')
     parser.set_defaults(remove_h=None)
-    parser.add_argument('--use_defog_split', action='store_true',
-                        help='Use DeFoG original CSV split for QM9 instead of random split')
+    qm9_split_group = parser.add_mutually_exclusive_group()
+    qm9_split_group.add_argument(
+        '--use_defog_split', dest='use_defog_split', action='store_true',
+        help='Use the original DeFoG raw-row split for QM9',
+    )
+    qm9_split_group.add_argument(
+        '--legacy_qm9_split', dest='use_defog_split', action='store_false',
+        help='Use the legacy GammaGL clean-sample split for QM9',
+    )
+    parser.set_defaults(use_defog_split=None)
     parser.add_argument('--num_graphs', type=int, default=200)
     parser.add_argument('--min_nodes', type=int, default=10)
     parser.add_argument('--max_nodes', type=int, default=20)

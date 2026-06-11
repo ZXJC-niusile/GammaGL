@@ -11,6 +11,16 @@ from gammagl.data import (
     download_url,
 )
 
+def build_zinc_split_indices(n_samples, validation_indices):
+    r"""Return the train and held-out splits used by original DeFoG."""
+    held_out = sorted({int(index) for index in validation_indices})
+    if any(index < 0 or index >= n_samples for index in held_out):
+        raise ValueError('validation index is outside the dataset')
+    held_out_set = set(held_out)
+    train = [index for index in range(n_samples) if index not in held_out_set]
+    return {'train': train, 'val': held_out, 'test': list(held_out)}
+
+
 
 class ZINC250kGen(InMemoryDataset):
     r"""The ZINC250k dataset for molecular graph generation.
@@ -138,18 +148,12 @@ class ZINC250kGen(InMemoryDataset):
         # Read validation indices
         idx_path = osp.join(self.raw_dir, 'valid_idx_zinc250k.json')
         with open(idx_path, 'r') as f:
-            val_indices = set(json.load(f))
+            validation_indices = json.load(f)
 
-        # val and test share the same indices (original DeFoG behavior)
-        train_indices = [i for i in range(len(smiles_list))
-                         if i not in val_indices]
-        val_indices_list = sorted(val_indices)
-
-        split_indices = {
-            'train': train_indices,
-            'val': val_indices_list,
-            'test': val_indices_list,
-        }
+        # Validation and test intentionally share the original held-out set.
+        split_indices = build_zinc_split_indices(
+            len(smiles_list), validation_indices
+        )
 
         for split_name, split_idx in [('train', 0), ('val', 1), ('test', 2)]:
             indices = split_indices[split_name]

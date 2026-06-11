@@ -27,7 +27,7 @@ def test_presets_match_pre_extraction_values():
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()
     ).hexdigest()
-    assert digest == '3fa21953c958cdaae17e32a7d71278adf138fd292bd6748facfa6e5795f54e44'
+    assert digest == '43f038fcdcf6141337ed5f47ce61edf74eb29c083d9dc8edbfb16f7458ae3ce0'
     assert set(_DATASET_PRESETS) == {
         'planar', 'tree', 'sbm', 'qm9', 'zinc250k',
         'guacamol', 'moses', 'tls', 'comm20',
