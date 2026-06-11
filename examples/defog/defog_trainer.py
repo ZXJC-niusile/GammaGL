@@ -36,6 +36,7 @@ from evaluator import evaluate_generated_graphs, compute_selection_score
 from defog_config import apply_dataset_preset
 import defog_checkpoint as checkpoint
 from defog_optimizer import TorchAdamW
+from defog_training import batch_global_features, create_training_loader
 
 
 
@@ -334,45 +335,10 @@ def main(args):
 
     # DataLoader with seeded shuffle
     print(f"[debug] Creating DataLoader with batch_size={args.batch_size}...")
-
-    class SeededRandomSampler:
-        """Reproducible random sampler: each epoch shuffles with seed + epoch."""
-        def __init__(self, data_source, seed=42):
-            self.data_source = data_source
-            self.seed = seed
-            self.epoch = 0
-        def __iter__(self):
-            rng = np.random.default_rng(self.seed + self.epoch)
-            indices = np.arange(len(self.data_source))
-            rng.shuffle(indices)
-            self.epoch += 1
-            for idx in indices:
-                yield int(idx)
-        def __len__(self):
-            return len(self.data_source)
-
-    from tensorlayerx.dataflow import BatchSampler
-    from gammagl.loader.dataloader import Collater
-    sampler = SeededRandomSampler(graphs, seed=args.seed)
-    batch_sampler = BatchSampler(sampler, args.batch_size, drop_last=False)
-    
-    try:
-        import torch
-        from torch.utils.data import DataLoader as TorchDataLoader
-        loader = TorchDataLoader(
-            graphs,
-            batch_sampler=batch_sampler,
-            collate_fn=Collater(follow_batch=None, exclude_keys=None),
-            num_workers=8,
-            pin_memory=True,
-            persistent_workers=True,
-            multiprocessing_context='spawn'
-        )
-        print("[debug] DataLoader created (seeded shuffle) with num_workers=8 (PyTorch)")
-    except Exception as e:
-        print(f"[warn] PyTorch DataLoader failed: {e}. Falling back to default.")
-        loader = DataLoader(graphs, batch_sampler=batch_sampler, collate_fn=Collater(follow_batch=None, exclude_keys=None))
-        print("[debug] DataLoader created (seeded shuffle)")
+    loader, loader_backend = create_training_loader(
+        graphs, args.batch_size, args.seed
+    )
+    print(f"[debug] DataLoader created ({loader_backend})")
 
     # EMA (Exponential Moving Average)
     ema = None
@@ -423,19 +389,7 @@ def main(args):
                 bs = dense.X.shape[0]
 
                 # Extract y (conditional labels or empty)
-                if conditional and hasattr(batch, 'y') and batch.y is not None:
-                    y_np = tlx.convert_to_numpy(batch.y)
-                    if y_np.ndim == 1:
-                        y_np = y_np.reshape(bs, -1)
-                    elif y_np.ndim > 2:
-                        y_np = y_np.reshape(bs, -1)
-                    # Filter out dummy y values (shape[1]==0)
-                    if y_np.shape[-1] == 0:
-                        y = tlx.zeros([bs, 0], dtype=tlx.float32)
-                    else:
-                        y = tlx.convert_to_tensor(y_np.astype(np.float32))
-                else:
-                    y = tlx.zeros([bs, 0], dtype=tlx.float32)
+                y = batch_global_features(batch, bs, conditional)
 
                 data_dict = {
                     'X': dense.X,
