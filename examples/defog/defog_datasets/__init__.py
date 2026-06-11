@@ -1,16 +1,16 @@
 """DeFoG-specific graph generation datasets.
 
-These datasets are designed for discrete flow matching graph generation
+The molecular and domain-specific datasets are designed for discrete flow matching graph generation
 and contain heavy preprocessing (dense adjacency matrices, atom/bond
 distribution statistics, eigenvalue caching, etc.) that is specific to
 the DeFoG training pipeline.
 
-They are intentionally kept in ``examples/defog/defog_datasets/`` rather than
+Those datasets are intentionally kept in ``examples/defog/defog_datasets/`` rather than
 ``gammagl/datasets/`` to avoid polluting the core GammaGL package with
 optional heavy dependencies (RDKit, graph-tool, etc.).
 """
 
-from .spectre_dataset import (
+from gammagl.datasets import (
     PlanarGraphDataset,
     TreeGraphDataset,
     SBMGraphDataset,
