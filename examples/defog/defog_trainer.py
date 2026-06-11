@@ -31,7 +31,7 @@ from flow_matching import NoiseDistribution, apply_noise, RateMatrixDesigner, Ti
 from extra_features import ExtraFeatures, compute_extra_data, DummyExtraFeatures, ExtraMolecularFeatures
 
 from train_metrics import TrainLossDiscrete
-from sampler import sample_batch
+from sampler import sample_batch, sample_in_batches
 from evaluator import evaluate_generated_graphs, compute_selection_score
 from defog_config import apply_dataset_preset
 import defog_checkpoint as checkpoint
@@ -489,48 +489,26 @@ def main(args):
                     if ema is not None:
                         ema.swap_in(model)
                     try:
-                        sample_bs = getattr(args, 'sample_batch_size', 0) or val_batch_size
-                        if sample_bs >= val_batch_size:
-                            generated_val = sample_batch(
-                                model=model,
-                                noise_dist=noise_dist,
-                                rate_matrix_designer=rate_designer,
-                                time_distorter=time_distorter,
-                                extra_features=extra_features,
-                                domain_features=domain_features,
-                                node_dist=dataset_infos['node_dist'],
-                                sample_steps=args.sample_steps,
-                                batch_size=val_batch_size,
-                                conditional=conditional,
-                                cond_labels=cond_labels,
-                                guidance_weight=args.guidance_weight,
-                            )
-                        else:
-                            all_generated_batches = []
-                            num_batches = (val_batch_size + sample_bs - 1) // sample_bs
-                            for b_idx in range(num_batches):
-                                current_bs = min(sample_bs, val_batch_size - len(all_generated_batches))
-                                print(f"  Validation batch {b_idx + 1}/{num_batches} (size={current_bs})...")
-                                batch_cond = None
-                                if cond_labels is not None:
-                                    start_idx = b_idx * sample_bs
-                                    batch_cond = cond_labels[start_idx:start_idx + current_bs]
-                                batch_generated = sample_batch(
-                                    model=model,
-                                    noise_dist=noise_dist,
-                                    rate_matrix_designer=rate_designer,
-                                    time_distorter=time_distorter,
-                                    extra_features=extra_features,
-                                    domain_features=domain_features,
-                                    node_dist=dataset_infos['node_dist'],
-                                    sample_steps=args.sample_steps,
-                                    batch_size=current_bs,
-                                    conditional=conditional,
-                                    cond_labels=batch_cond,
-                                    guidance_weight=args.guidance_weight,
-                                )
-                                all_generated_batches.extend(batch_generated)
-                            generated_val = all_generated_batches
+                        sample_bs = (
+                            getattr(args, 'sample_batch_size', 0)
+                            or val_batch_size
+                        )
+                        generated_val = sample_in_batches(
+                            sample_batch,
+                            total_size=val_batch_size,
+                            batch_size=sample_bs,
+                            cond_labels=cond_labels,
+                            model=model,
+                            noise_dist=noise_dist,
+                            rate_matrix_designer=rate_designer,
+                            time_distorter=time_distorter,
+                            extra_features=extra_features,
+                            domain_features=domain_features,
+                            node_dist=dataset_infos['node_dist'],
+                            sample_steps=args.sample_steps,
+                            conditional=conditional,
+                            guidance_weight=args.guidance_weight,
+                        )
 
                         val_metrics = evaluate_generated_graphs(
                             generated_val,
@@ -614,49 +592,25 @@ def main(args):
                 print(f"  Using classifier-free guidance (weight={args.guidance_weight})")
 
             # Support memory-constrained sampling via sample_batch_size
-            sample_bs = getattr(args, 'sample_batch_size', 0) or args.num_samples
-            if sample_bs >= args.num_samples:
-                generated = sample_batch(
-                    model=model,
-                    noise_dist=noise_dist,
-                    rate_matrix_designer=rate_designer,
-                    time_distorter=time_distorter,
-                    extra_features=extra_features,
-                    domain_features=domain_features,
-                    node_dist=dataset_infos['node_dist'],
-                    sample_steps=args.sample_steps,
-                    batch_size=args.num_samples,
-                    conditional=conditional,
-                    cond_labels=cond_labels,
-                    guidance_weight=args.guidance_weight,
-                )
-            else:
-                all_generated_batches = []
-                num_batches = (args.num_samples + sample_bs - 1) // sample_bs
-                for b_idx in range(num_batches):
-                    current_bs = min(sample_bs, args.num_samples - len(all_generated_batches))
-                    print(f"  Sampling batch {b_idx + 1}/{num_batches} (size={current_bs})...")
-                    batch_cond = None
-                    if cond_labels is not None:
-                        start = b_idx * sample_bs
-                        end = start + current_bs
-                        batch_cond = cond_labels[start:end]
-                    batch_generated = sample_batch(
-                        model=model,
-                        noise_dist=noise_dist,
-                        rate_matrix_designer=rate_designer,
-                        time_distorter=time_distorter,
-                        extra_features=extra_features,
-                        domain_features=domain_features,
-                        node_dist=dataset_infos['node_dist'],
-                        sample_steps=args.sample_steps,
-                        batch_size=current_bs,
-                        conditional=conditional,
-                        cond_labels=batch_cond,
-                        guidance_weight=args.guidance_weight,
-                    )
-                    all_generated_batches.extend(batch_generated)
-                generated = all_generated_batches
+            sample_bs = (
+                getattr(args, 'sample_batch_size', 0) or args.num_samples
+            )
+            generated = sample_in_batches(
+                sample_batch,
+                total_size=args.num_samples,
+                batch_size=sample_bs,
+                cond_labels=cond_labels,
+                model=model,
+                noise_dist=noise_dist,
+                rate_matrix_designer=rate_designer,
+                time_distorter=time_distorter,
+                extra_features=extra_features,
+                domain_features=domain_features,
+                node_dist=dataset_infos['node_dist'],
+                sample_steps=args.sample_steps,
+                conditional=conditional,
+                guidance_weight=args.guidance_weight,
+            )
 
             print(f"Generated {len(generated)} graphs:")
             for i, (x, e) in enumerate(generated[:5]):

@@ -62,6 +62,32 @@ def _cfg_unconditional_pred(model, X_in, E_in, extra_data, y_t, node_mask):
     return pred_X_soft_u, pred_E_soft_u
 
 
+def sample_in_batches(sample_fn, total_size, batch_size, cond_labels=None,
+                      num_nodes=None, **sample_kwargs):
+    r"""Run a sampler in stable, ordered chunks.
+
+    Conditional labels and explicit node counts are sliced with the same
+    boundaries as the generated graphs.
+    """
+    if total_size < 0:
+        raise ValueError('total_size must be non-negative')
+    if batch_size <= 0:
+        raise ValueError('batch_size must be positive')
+
+    generated = []
+    for start in range(0, total_size, batch_size):
+        end = min(start + batch_size, total_size)
+        batch_kwargs = dict(sample_kwargs)
+        if cond_labels is not None:
+            batch_kwargs['cond_labels'] = cond_labels[start:end]
+        if num_nodes is not None:
+            batch_kwargs['num_nodes'] = num_nodes[start:end]
+        generated.extend(
+            sample_fn(batch_size=end - start, **batch_kwargs)
+        )
+    return generated
+
+
 def sample_batch(model, noise_dist, rate_matrix_designer, time_distorter,
                  extra_features, domain_features, node_dist,
                  sample_steps, batch_size, num_nodes=None,
