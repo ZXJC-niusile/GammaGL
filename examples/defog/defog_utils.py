@@ -1,47 +1,7 @@
 import math
 import numpy as np
 import tensorlayerx as tlx
-
-def _to_dense_batch(x, batch):
-    r"""Backend-agnostic conversion from sparse batched node features to dense.
-
-    Parameters
-    ----------
-    x : tensor
-        Node features ``(N_total, dx)``.
-    batch : tensor
-        Batch assignment vector ``(N_total,)``.
-
-    Returns
-    -------
-    tuple
-        ``(X, mask)`` where X is ``(bs, n_max, dx)`` and mask is ``(bs, n_max)`` bool.
-    """
-    x_np = tlx.convert_to_numpy(x)
-    if batch is None:
-        X = x_np[np.newaxis, :, :]
-        mask = np.ones((1, x_np.shape[0]), dtype=bool)
-        return tlx.convert_to_tensor(X.astype(np.float32)), \
-               tlx.convert_to_tensor(mask)
-
-    batch_np = tlx.convert_to_numpy(batch).astype(np.int64)
-    batch_size = int(batch_np.max()) + 1
-    num_nodes = np.bincount(batch_np, minlength=batch_size)
-    max_num_nodes = int(num_nodes.max())
-    dx = x_np.shape[-1]
-
-    cum_nodes = np.concatenate([[0], np.cumsum(num_nodes)[:-1]])
-
-    X = np.zeros((batch_size, max_num_nodes, dx), dtype=np.float32)
-    mask = np.zeros((batch_size, max_num_nodes), dtype=bool)
-
-    for i in range(len(batch_np)):
-        b = batch_np[i]
-        local_idx = i - cum_nodes[b]
-        X[b, local_idx] = x_np[i]
-        mask[b, local_idx] = True
-
-    return tlx.convert_to_tensor(X), tlx.convert_to_tensor(mask)
+from gammagl.utils import to_dense_adj, to_dense_batch
 
 class PlaceHolder:
     def __init__(self, X, E, y=None):
@@ -89,50 +49,6 @@ def apply_node_mask(X, E, node_mask):
     return X_masked, E_masked
 
 
-def _to_dense_adj(edge_index, batch, edge_attr=None, max_num_nodes=None):
-    """Robust conversion of sparse adjacency to dense using numpy."""
-    batch_np = tlx.convert_to_numpy(batch)
-    ei_np = tlx.convert_to_numpy(edge_index)
-    ea_np = tlx.convert_to_numpy(edge_attr) if edge_attr is not None else None
-    
-    bs = int(np.max(batch_np)) + 1 if len(batch_np) > 0 else 1
-    if max_num_nodes is None:
-        nodes_per_graph = np.bincount(batch_np, minlength=bs)
-        max_num_nodes = int(np.max(nodes_per_graph))
-        
-    de = 1 if ea_np is None else (ea_np.shape[-1] if len(ea_np.shape) > 1 else 1)
-    adj = np.zeros((bs, max_num_nodes, max_num_nodes, de), dtype=np.float32)
-    
-    # Compute node offsets within each graph
-    cum_nodes = np.zeros(bs + 1, dtype=np.int64)
-    nodes_per_graph = np.bincount(batch_np, minlength=bs)
-    cum_nodes[1:] = np.cumsum(nodes_per_graph)
-    
-    if len(ei_np[0]) > 0:
-        graph_idx = batch_np[ei_np[0]]
-        src = ei_np[0] - cum_nodes[graph_idx]
-        dst = ei_np[1] - cum_nodes[graph_idx]
-        
-        valid = (src < max_num_nodes) & (dst < max_num_nodes)
-        graph_idx = graph_idx[valid]
-        src = src[valid]
-        dst = dst[valid]
-        
-        if ea_np is not None:
-            vals = ea_np[valid]
-            if len(vals.shape) == 1:
-                vals = vals.reshape(-1, 1)
-        else:
-            vals = np.ones((len(src), 1), dtype=np.float32)
-            
-        adj[graph_idx, src, dst, :] = vals
-        
-    if ea_np is None or (len(ea_np.shape) == 1):
-        adj = adj.squeeze(-1)
-        
-    return tlx.convert_to_tensor(adj)
-
-
 def to_dense(x, edge_index, edge_attr, batch, num_nodes=None):
     r"""Convert sparse graph to dense representation.
 
@@ -152,7 +68,7 @@ def to_dense(x, edge_index, edge_attr, batch, num_nodes=None):
     PlaceHolder, node_mask
         Dense graph data and boolean node mask.
     """
-    X, node_mask = _to_dense_batch(x, batch)
+    X, node_mask = to_dense_batch(x, batch)
 
     max_num_nodes = X.shape[1]
 
@@ -163,8 +79,12 @@ def to_dense(x, edge_index, edge_attr, batch, num_nodes=None):
     edge_index_clean = edge_index[:, mask]
     edge_attr_clean = edge_attr[mask] if edge_attr is not None else None
 
-    E = _to_dense_adj(edge_index_clean, batch, edge_attr_clean,
-                       max_num_nodes=max_num_nodes)
+    E = to_dense_adj(
+        edge_index_clean,
+        batch=batch,
+        edge_attr=edge_attr_clean,
+        max_num_nodes=max_num_nodes,
+    )
 
     if len(E.shape) == 3:
         E = tlx.expand_dims(E, axis=-1)
@@ -196,15 +116,16 @@ def encode_no_edge(E):
     if E.shape[-1] == 0:
         return E
 
-    E_np = tlx.convert_to_numpy(E)
-    no_edge = np.sum(E_np, axis=3) == 0
-    E_np[:, :, :, 0][no_edge] = 1.0
+    no_edge = tlx.cast(
+        tlx.reduce_sum(E, axis=-1, keepdims=True) == 0,
+        E.dtype,
+    )
+    E = tlx.concat([E[..., :1] + no_edge, E[..., 1:]], axis=-1)
 
-    n = E_np.shape[1]
-    for i in range(n):
-        E_np[:, i, i, :] = 0.0
-
-    return tlx.convert_to_tensor(E_np, dtype=E.dtype)
+    n = E.shape[1]
+    diagonal = tlx.expand_dims(tlx.eye(n, dtype=E.dtype), axis=0)
+    diagonal = tlx.expand_dims(diagonal, axis=-1)
+    return E * (1.0 - diagonal)
 
 
 # ============================================================

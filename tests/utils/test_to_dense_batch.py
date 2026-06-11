@@ -51,4 +51,21 @@ def test_to_dense_batch():
 
     # out, mask = to_dense_batch(x, batch, batch_size=4)
     # assert out.size() == (4, 3, 2)
-    
+
+
+def test_to_dense_batch_preserves_torch_cuda_device():
+    if tlx.BACKEND != 'torch':
+        return
+
+    import torch
+    if not torch.cuda.is_available():
+        return
+
+    x = torch.tensor([[1.0], [2.0], [3.0]], device='cuda')
+    batch = torch.tensor([0, 0, 1], dtype=torch.int64, device='cuda')
+    out, mask = to_dense_batch(x, batch)
+
+    assert out.is_cuda
+    assert mask.is_cuda
+    assert out.shape == (2, 2, 1)
+    assert torch.equal(mask, torch.tensor([[True, True], [True, False]], device='cuda'))

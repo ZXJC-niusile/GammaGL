@@ -39,6 +39,35 @@ def to_dense_batch(x, batch=None, fill_value=0, max_num_nodes=None):
     
     if batch is None:
         batch = tlx.zeros((x.shape[0],), dtype=tlx.int64)
+
+    if tlx.BACKEND == 'torch':
+        import torch
+
+        batch = batch.to(x.device)
+        batch_size = int(batch.max().item()) + 1
+        num_nodes = torch.bincount(batch, minlength=batch_size)
+        max_num_nodes = (
+            int(num_nodes.max().item())
+            if max_num_nodes is None
+            else int(max_num_nodes)
+        )
+        cum_nodes = torch.cat([
+            torch.zeros(1, dtype=batch.dtype, device=batch.device),
+            torch.cumsum(num_nodes, dim=0),
+        ])
+        idx = torch.arange(batch.shape[0], device=batch.device)
+        idx = idx - cum_nodes[batch] + batch * max_num_nodes
+
+        shape = [batch_size * max_num_nodes] + list(x.shape)[1:]
+        ret = torch.full(shape, fill_value, dtype=x.dtype, device=x.device)
+        ret.index_copy_(0, idx, x)
+        ret = ret.reshape([batch_size, max_num_nodes] + list(x.shape)[1:])
+
+        mask = torch.zeros(
+            batch_size * max_num_nodes, dtype=torch.bool, device=batch.device
+        )
+        mask[idx] = True
+        return ret, mask.reshape(batch_size, max_num_nodes)
     
     batch_size = tlx.reduce_max(batch) + 1
     num_nodes = tlx.unsorted_segment_sum(tlx.ones((x.shape[0],), dtype=batch.dtype), batch, num_segments=batch_size)
