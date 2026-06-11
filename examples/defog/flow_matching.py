@@ -191,7 +191,7 @@ def sample_discrete_features(probX, probE, node_mask, mask=False):
     inv_edge_mask = 1.0 - torch.unsqueeze(nm, dim=2) * torch.unsqueeze(nm, dim=1)
     inv_edge_mask = torch.unsqueeze(inv_edge_mask, dim=-1)  # (bs, n, n, 1)
 
-    eye_n = torch.eye(n)
+    eye_n = torch.eye(n, device=probE.device)
     diag_mask = torch.reshape(eye_n, [1, n, n, 1])
     diag_mask = torch.tile(diag_mask, [bs, 1, 1, 1])
 
@@ -218,7 +218,7 @@ def sample_discrete_features(probX, probE, node_mask, mask=False):
 
     X_t = X_t.to(torch.int64)
     E_t_int = E_t_int.to(torch.int64)
-    U_y = torch.zeros([bs, 0], dtype=torch.float32)
+    U_y = torch.zeros([bs, 0], dtype=torch.float32, device=probX.device)
 
     return PlaceHolder(X=X_t, E=E_t_int, y=U_y)
 
@@ -704,14 +704,12 @@ class RateMatrixDesigner:
         elif self.rdb == 'column':
             # Determine column indices based on sub-criterion
             if self.rdb_crit == 'max_marginal':
-                limit_X_np = self.limit_dist.X.detach().cpu().numpy()
-                limit_E_np = self.limit_dist.E.detach().cpu().numpy()
-                x_col = np.full_like(X_t_label.detach().cpu().numpy().squeeze(-1),
-                                     limit_X_np.argmax(), dtype=np.int64)
-                e_col = np.full_like(E_t_label.detach().cpu().numpy().squeeze(-1),
-                                     limit_E_np.argmax(), dtype=np.int64)
-                x_column_idxs = torch.tensor(x_col[..., np.newaxis])
-                e_column_idxs = torch.tensor(e_col[..., np.newaxis])
+                x_column_idxs = torch.full_like(
+                    X_t_label, torch.argmax(self.limit_dist.X)
+                )
+                e_column_idxs = torch.full_like(
+                    E_t_label, torch.argmax(self.limit_dist.E)
+                )
 
             elif self.rdb_crit == 'x_t':
                 x_column_idxs = X_t_label
@@ -748,13 +746,14 @@ class RateMatrixDesigner:
             x_mask = torch.nn.functional.one_hot(x_col_squeezed, num_classes=dx).float()
             e_mask = torch.nn.functional.one_hot(e_col_squeezed, num_classes=de).float()
 
-            # Also keep current state
-            eq_x = torch.reshape(x_column_idxs == X_t_label.to(x_mask.shape[:-1] + (1,)),
-                            torch.float32)
-            eq_e = torch.reshape(e_column_idxs == E_t_label.to(e_mask.shape[:-1] + (1,)),
-                            torch.float32)
-            x_mask = torch.maximum(x_mask, eq_x)
-            e_mask = torch.maximum(e_mask, eq_e)
+            # Match the original implementation: if the selected column is
+            # the current state, allow every destination in that row.
+            x_mask = torch.where(
+                x_column_idxs == X_t_label, torch.ones_like(x_mask), x_mask
+            )
+            e_mask = torch.where(
+                e_column_idxs == E_t_label, torch.ones_like(e_mask), e_mask
+            )
 
         elif self.rdb == 'entry':
             if self.rdb_crit == 'abs_state':
@@ -770,41 +769,30 @@ class RateMatrixDesigner:
             else:
                 raise NotImplementedError(f"rdb_crit '{self.rdb_crit}' not implemented for entry")
 
-            # Build mask via numpy for advanced indexing
-            x_mask_np = np.zeros_like(pX.detach().cpu().numpy())
-            e_mask_np = np.zeros_like(pE.detach().cpu().numpy())
-
-            X_t_np = X_t_label.detach().cpu().numpy().squeeze(-1).astype(np.int64)
-            E_t_np = E_t_label.detach().cpu().numpy().squeeze(-1).astype(np.int64)
-            x1_np = x1_idxs.detach().cpu().numpy().squeeze(-1).astype(np.int64)
-            e1_np = e1_idxs.detach().cpu().numpy().squeeze(-1).astype(np.int64)
-
-            bs = x_mask_np.shape[0]
-
-            # X: swap between current and target
-            for b in range(bs):
-                n = x_mask_np.shape[1]
-                for i in range(n):
-                    if X_t_np[b, i] == x1_np[b, i]:
-                        # Current == target: mark the absorbing state
-                        if x_masked_idx < dx:
-                            x_mask_np[b, i, x_masked_idx] = 1.0
-                    elif X_t_np[b, i] == x_masked_idx:
-                        # Current is the absorbing state: mark target
-                        x_mask_np[b, i, x1_np[b, i]] = 1.0
-
-            for b in range(bs):
-                ni, nj = e_mask_np.shape[1], e_mask_np.shape[2]
-                for i in range(ni):
-                    for j in range(nj):
-                        if E_t_np[b, i, j] == e1_np[b, i, j]:
-                            if e_masked_idx < de:
-                                e_mask_np[b, i, j, e_masked_idx] = 1.0
-                        elif E_t_np[b, i, j] == e_masked_idx:
-                            e_mask_np[b, i, j, e1_np[b, i, j]] = 1.0
-
-            x_mask = torch.tensor(x_mask_np)
-            e_mask = torch.tensor(e_mask_np)
+            x_mask = torch.zeros_like(pX)
+            e_mask = torch.zeros_like(pE)
+            x_masked = torch.full_like(X_1_sampled, x_masked_idx)
+            e_masked = torch.full_like(E_1_sampled, e_masked_idx)
+            x_mask = torch.where(
+                X_t_label == x1_idxs,
+                torch.nn.functional.one_hot(x_masked, dx).float(),
+                x_mask,
+            )
+            e_mask = torch.where(
+                E_t_label == e1_idxs,
+                torch.nn.functional.one_hot(e_masked, de).float(),
+                e_mask,
+            )
+            x_mask = torch.where(
+                X_t_label == x_masked_idx,
+                torch.nn.functional.one_hot(X_1_sampled, dx).float(),
+                x_mask,
+            )
+            e_mask = torch.where(
+                E_t_label == e_masked_idx,
+                torch.nn.functional.one_hot(E_1_sampled, de).float(),
+                e_mask,
+            )
 
         else:
             raise NotImplementedError(f"rdb type '{self.rdb}' not implemented")
