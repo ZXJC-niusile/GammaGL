@@ -60,6 +60,22 @@ Pooling Layers
     gammagl.layers.pool.global_sum_pool
     gammagl.layers.pool.global_sort_pool
 
+
+DeFoG Attention Layers
+----------------------
+
+.. currentmodule:: gammagl.layers.attention.defog_layer
+.. autosummary::
+   :nosignatures:
+   :toctree: ../generated
+   :template: autosummary/layers_class.rst
+
+    gammagl.layers.attention.defog_layer.XEyTransformerLayer
+    gammagl.layers.attention.defog_layer.NodeEdgeBlock
+    gammagl.layers.attention.defog_layer.Xtoy
+    gammagl.layers.attention.defog_layer.Etoy
+
+
 Model
 -----
 
@@ -69,6 +85,7 @@ Model
    :toctree: ../generated
    :template: autosummary/layers_class.rst
 
+    gammagl.models.DeFoGModel
     gammagl.models.GCNModel
     gammagl.models.GATModel
     gammagl.models.SGCModel
