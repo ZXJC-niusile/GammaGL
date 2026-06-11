@@ -3,7 +3,7 @@ import tensorlayerx as tlx
 import networkx as nx
 
 def compute_tls_metrics(generated, cond_labels, train_graphs):
-    from gammagl.datasets.tls_dataset import CellGraph, PHENOTYPE_DECODER
+    from defog_datasets.tls_dataset import CellGraph, PHENOTYPE_DECODER
     
     train_hashes = set()
     if train_graphs is not None:
