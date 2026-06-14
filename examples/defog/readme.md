@@ -195,50 +195,65 @@ Current status:
 
 ### Planar (3 seeds, completed)
 
-Trained for 100,000 epochs each. Results compared against the DeFoG paper (Table 7).
+Each checkpoint was trained for 100,000 epochs and evaluated in five
+independent folds of 40 graphs with 1,000 sampling steps, matching the paper
+protocol. Seed columns report mean ± standard deviation across the five folds.
+The final column reports mean ± standard deviation across the three seed-level
+means.
 
-| Metric | Paper (DeFoG) | Seed 0 | Seed 1 | Seed 2 | Mean ± Std |
-|--------|---------------|--------|--------|--------|------------|
-| Valid ↑ | 99.5 ± 1.0 | 99.0 | 97.7 | 99.5 | **98.7 ± 0.8** |
-| Unique ↑ | 100.0 ± 0.0 | 100.0 | 100.0 | 100.0 | **100.0 ± 0.0** |
-| Non-iso ↑ | 100.0 ± 0.0 | 100.0 | 100.0 | 100.0 | **100.0 ± 0.0** |
-| Planar Acc ↑ | — | 99.0 | 97.7 | 99.5 | **98.7 ± 0.8** |
-| Degree ↓ | 0.0005 ± 0.0002 | 0.000032 | 0.000038 | 0.000511 | **0.000194 ± 0.000221** |
-| Spectre ↓ | 0.0072 ± 0.0011 | 0.004791 | 0.004527 | 0.004335 | **0.004551 ± 0.000189** |
-| Clustering ↓ | 0.0501 ± 0.0149 | 0.020626 | 0.018320 | 0.037029 | **0.025325 ± 0.008415** |
-| Orbit ↓ | 0.0006 ± 0.0004 | 0.000059 | 0.001910 | 0.000223 | **0.000731 ± 0.000824** |
-| Wavelet ↓ | 0.0014 ± 0.0002 | 0.000016 | 0.000139 | 0.000167 | **0.000107 ± 0.000066** |
+| Metric | Paper (DeFoG) | Seed 0 | Seed 1 | Seed 2 | Across seeds |
+|--------|---------------|--------|--------|--------|--------------|
+| V.U.N. / Valid ↑ | 99.5 ± 1.0 | 99.00 ± 1.22 | 98.50 ± 1.22 | 99.00 ± 1.22 | **98.83 ± 0.24** |
+| Unique ↑ | 100.0 ± 0.0 | 100.00 ± 0.00 | 100.00 ± 0.00 | 100.00 ± 0.00 | **100.00 ± 0.00** |
+| Non-iso ↑ | 100.0 ± 0.0 | 100.00 ± 0.00 | 100.00 ± 0.00 | 100.00 ± 0.00 | **100.00 ± 0.00** |
+| Degree ↓ | 0.0005 ± 0.0002 | 0.000265 ± 0.000104 | 0.000225 ± 0.000114 | 0.000684 ± 0.000275 | **0.000391 ± 0.000208** |
+| Spectre ↓ | 0.0072 ± 0.0011 | 0.007347 ± 0.001106 | 0.007949 ± 0.001185 | 0.007413 ± 0.000735 | **0.007570 ± 0.000270** |
+| Clustering ↓ | 0.0501 ± 0.0149 | 0.034104 ± 0.007386 | 0.035744 ± 0.004492 | 0.042114 ± 0.009702 | **0.037321 ± 0.003455** |
+| Orbit ↓ | 0.0006 ± 0.0004 | 0.000218 ± 0.000130 | 0.001548 ± 0.001411 | 0.000745 ± 0.000388 | **0.000837 ± 0.000547** |
+| Wavelet ↓ | 0.0014 ± 0.0002 | 0.000044 ± 0.000010 | 0.000135 ± 0.000107 | 0.000194 ± 0.000093 | **0.000124 ± 0.000062** |
 
 ### Tree (3 seeds, completed)
 
-Trained for 100,000 epochs each. Best checkpoint evaluated with 40 samples, 1000 denoising steps.
+Each checkpoint was trained for 100,000 epochs and evaluated with the same
+five-fold protocol used for Planar. The paper comparison is the Tree V.U.N.
+reported in Table 1.
 
-| Metric | Paper (DeFoG) | Seed 0 (best) | Seed 1 | Seed 2 | Mean ± Std |
-|--------|---------------|---------------|--------|--------|------------|
-| Valid ↑ | 100.0 | 100.0 | 95.0 | 100.0 | **98.3 ± 2.4** |
-| Unique ↑ | 100.0 | 82.5 | 87.5 | 85.0 | **85.0 ± 2.0** |
-| Non-iso ↑ | 100.0 | 100.0 | 100.0 | 100.0 | **100.0 ± 0.0** |
-| Tree Acc ↑ | 100.0 | 100.0 | 95.0 | 100.0 | **98.3 ± 2.4** |
-| Degree ↓ | — | 0.000575 | 0.000582 | 0.000287 | **0.000481 ± 0.000137** |
-| Spectre ↓ | — | 0.010322 | 0.011042 | 0.011507 | **0.010957 ± 0.000488** |
-| Clustering ↓ | — | 0.000000 | 0.000000 | 0.000000 | **0.000000 ± 0.000000** |
-| Orbit ↓ | — | 0.000007 | 0.000013 | 0.000000 | **0.000007 ± 0.000005** |
-| Wavelet ↓ | — | 0.000613 | 0.000518 | 0.000586 | **0.000572 ± 0.000039** |
+| Metric | Paper (DeFoG) | Seed 0 | Seed 1 | Seed 2 | Across seeds |
+|--------|---------------|--------|--------|--------|--------------|
+| V.U.N. / Valid ↑ | 96.5 ± 2.6 | 97.50 ± 2.24 | 95.50 ± 1.87 | 95.50 ± 1.00 | **96.17 ± 0.94** |
+| Unique ↑ | — | 100.00 ± 0.00 | 100.00 ± 0.00 | 100.00 ± 0.00 | **100.00 ± 0.00** |
+| Non-iso ↑ | — | 100.00 ± 0.00 | 100.00 ± 0.00 | 100.00 ± 0.00 | **100.00 ± 0.00** |
+| Degree ↓ | — | 0.000350 ± 0.000324 | 0.000318 ± 0.000233 | 0.000343 ± 0.000163 | **0.000337 ± 0.000014** |
+| Spectre ↓ | — | 0.010665 ± 0.001202 | 0.010092 ± 0.000370 | 0.011079 ± 0.000480 | **0.010612 ± 0.000405** |
+| Clustering ↓ | — | 0.000000 ± 0.000000 | 0.000000 ± 0.000000 | 0.000000 ± 0.000000 | **0.000000 ± 0.000000** |
+| Orbit ↓ | — | 0.000029 ± 0.000026 | 0.000041 ± 0.000020 | 0.000014 ± 0.000012 | **0.000028 ± 0.000011** |
+| Wavelet ↓ | — | 0.000648 ± 0.000092 | 0.000674 ± 0.000036 | 0.000570 ± 0.000293 | **0.000631 ± 0.000044** |
+
+Set `dataset` to either `planar` or `tree`.
 
 *Training command (per seed):*
 ```bash
 TL_BACKEND="torch" python defog_trainer.py \
-  --dataset tree \
+  --dataset ${dataset} \
   --data_root ./datasets \
-  --save_dir ./checkpoints_tree_seed${seed}_final \
+  --save_dir ./checkpoints_${dataset}_seed${seed}_final \
   --seed ${seed} \
   --gpu 0 \
-  --n_layers 10 --hidden_mlp_X 128 --hidden_mlp_E 64 --hidden_mlp_y 128 \
-  --dx 256 --de 64 --dy 64 --dim_ffX 256 --dim_ffE 64 --dim_ffy 256 \
-  --n_head 8 --n_epochs 100000 --batch_size 64 --lr 2e-4 \
-  --train_distortion polydec --sample_distortion polydec \
-  --omega 0 --eta 0 --sample_steps 1000 \
-  --check_val_every_n_epochs 2000 --sample_every_val 1 --val_num_samples 40
+  --n_epochs 100000
+```
+
+*Paper-protocol evaluation command:*
+```bash
+TL_BACKEND="torch" python defog_sample_only.py \
+  --dataset ${dataset} \
+  --data_root ./datasets \
+  --save_dir ./checkpoints_${dataset}_seed${seed}_final \
+  --seed ${seed} \
+  --num_samples 40 \
+  --num_sample_fold 5 \
+  --sample_steps 1000 \
+  --sample_batch_size 40 \
+  --evaluate
 ```
 
 ### QM9 no-H (3 seeds, completed)
