@@ -44,7 +44,7 @@ This directory contains the GammaGL reproduction of DeFoG. The current implement
 
 ## Preset Behavior
 
-For named datasets (`planar`, `tree`, `sbm`, `qm9`, `guacamol`, `zinc250k`, `moses`), `defog_trainer.py` and `defog_sample_only.py` automatically apply DeFoG-aligned dataset presets through `apply_dataset_preset()`.
+For named datasets (`planar`, `tree`, `sbm`, `qm9`, `guacamol`, `zinc250k`, `moses`, `tls`), `defog_trainer.py` and `defog_sample_only.py` automatically apply DeFoG-aligned dataset presets through `apply_dataset_preset()`.
 
 - Presets set dataset-specific values such as `n_layers`, `batch_size`, `sample_steps`, validation cadence, and sampling distortion.
 - Explicit CLI flags override the preset values.
@@ -187,7 +187,7 @@ The audit checks repository integration, paper presets, dependencies, the algori
 
 Current status:
 
-- Planar, Tree, and QM9 runs are recorded below.
+- Planar, Tree, TLS, and QM9 runs are recorded below.
 - ZINC metrics require final protocol-aligned comparison.
 - SBM evaluation now runs with `graph-tool`, but the observed validity is 5% (2/40) at epoch 48000 versus about 90% in the paper. Treat SBM as an open reproduction gap, not a completed result.
 
@@ -253,6 +253,42 @@ TL_BACKEND="torch" python defog_sample_only.py \
   --num_sample_fold 5 \
   --sample_steps 1000 \
   --sample_batch_size 40 \
+  --evaluate
+```
+
+### TLS conditional generation (1 seed, 5 sampling runs, completed)
+
+The final 100,000-epoch checkpoint was evaluated in five independent sampling
+runs of 80 conditional graphs with 1,000 sampling steps. This follows the
+paper protocol for reporting the mean and standard deviation across five runs;
+it is not a five-training-seed result. Results are compared with DeFoG Table 6
+at 1,000 steps.
+
+| Metric | Paper (DeFoG) | GammaGL | Difference |
+|--------|---------------|---------|------------|
+| V.U.N. ↑ | 94.5 ± 1.8 | **93.75 ± 2.09** | -0.75 pp |
+| TLS Validity ↑ | 95.8 ± 1.5 | **96.81 ± 1.78** | +1.01 pp |
+| Validity ↑ | — | **94.00 ± 2.42** | — |
+| Uniqueness ↑ | — | **99.74 ± 0.51** | — |
+| Novelty ↑ | — | **100.00 ± 0.00** | — |
+
+*Paper-protocol evaluation command:*
+```bash
+TL_BACKEND="torch" python defog_sample_only.py \
+  --dataset tls \
+  --data_root ./datasets \
+  --save_dir ./checkpoints_tls_cond_seed0 \
+  --seed 0 \
+  --conditional \
+  --target k2 \
+  --guidance_weight 2 \
+  --num_samples 80 \
+  --num_sample_fold 5 \
+  --sample_steps 1000 \
+  --sample_batch_size 40 \
+  --sample_distortion polydec \
+  --omega 0.05 \
+  --eta 0 \
   --evaluate
 ```
 
