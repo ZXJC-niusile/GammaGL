@@ -61,28 +61,46 @@ class TrainLossDiscrete(tlx.nn.Module):
         return loss_X + self.lambda_train[0] * loss_E + self.lambda_train[1] * loss_y
 
     def _masked_loss(self, metric, preds, targets, mask):
-        mask_float = tlx.cast(mask, tlx.float32)
-        n_valid = tlx.reduce_sum(mask_float) + 1e-8
+        metric_n = int(tlx.convert_to_numpy(
+            tlx.reduce_sum(tlx.cast(mask, tlx.int64))
+        ))
+        if metric_n == 0:
+            return tlx.reduce_sum(preds) * 0.0
+
+        valid_preds = tlx.mask_select(preds, mask, axis=0)
+        valid_targets = tlx.mask_select(targets, mask, axis=0)
 
         if self.kld:
-            preds_max = tlx.reduce_max(preds, axis=-1, keepdims=True)
-            exp_preds = tlx.exp(preds - preds_max)
-            log_preds = (preds - preds_max) - tlx.log(tlx.reduce_sum(exp_preds, axis=-1, keepdims=True) + 1e-10)
-            targets_safe = targets + 1e-10
-            kl_per_sample = tlx.reduce_sum(targets * (tlx.log(targets_safe) - log_preds), axis=-1)
-            loss = tlx.reduce_sum(kl_per_sample * mask_float) / n_valid
+            preds_max = tlx.reduce_max(
+                valid_preds, axis=-1, keepdims=True
+            )
+            exp_preds = tlx.exp(valid_preds - preds_max)
+            log_preds = (
+                valid_preds - preds_max
+                - tlx.log(
+                    tlx.reduce_sum(exp_preds, axis=-1, keepdims=True)
+                    + 1e-10
+                )
+            )
+            targets_safe = valid_targets + 1e-10
+            kl_per_sample = tlx.reduce_sum(
+                valid_targets * (tlx.log(targets_safe) - log_preds),
+                axis=-1,
+            )
+            loss = tlx.reduce_mean(kl_per_sample)
         else:
-            true_labels = tlx.cast(tlx.argmax(targets, axis=-1), tlx.int64)
-            per_sample_loss = tlx.losses.softmax_cross_entropy_with_logits(preds, true_labels)
-            
-            # Handling scalar vs vector reduction based on backend implementation
-            if len(per_sample_loss.shape) == 0:
-                loss = per_sample_loss
-            else:
-                loss = tlx.reduce_sum(per_sample_loss * mask_float) / n_valid
+            true_labels = tlx.cast(
+                tlx.argmax(valid_targets, axis=-1),
+                tlx.int64,
+            )
+            loss = tlx.losses.softmax_cross_entropy_with_logits(
+                valid_preds,
+                true_labels,
+            )
+            if len(loss.shape) > 0:
+                loss = tlx.reduce_mean(loss)
         
         metric_val = float(tlx.convert_to_numpy(loss))
-        metric_n = int(tlx.convert_to_numpy(tlx.reduce_sum(mask_float)))
         metric.update_precomputed(metric_val, metric_n)
         return loss
 
