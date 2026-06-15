@@ -424,7 +424,11 @@ def compute_fcd(generated_smiles, reference_smiles):
 
     generated_smiles = [s for s in generated_smiles if s is not None]
     try:
-        fcd_score = get_fcd(generated_smiles, reference_smiles)
+        fcd_score = get_fcd(
+            generated_smiles,
+            reference_smiles,
+            device='cpu',
+        )
     except Exception as e:
         print(f"  Error in FCD computation: {e}. Setting FCD to -1.")
         fcd_score = -1.0

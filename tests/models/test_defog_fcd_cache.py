@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import types
 
 os.environ['TL_BACKEND'] = 'torch'
 
@@ -11,6 +12,7 @@ if EXAMPLE_DIR not in sys.path:
     sys.path.insert(0, EXAMPLE_DIR)
 
 from evaluator import smiles_cache_paths
+from rdkit_functions import compute_fcd
 
 
 def test_reference_caches_are_isolated_by_evaluation_split():
@@ -49,8 +51,30 @@ def test_reference_cache_tag_cannot_escape_cache_directory():
         assert '..' not in os.path.basename(reference)
 
 
+def test_fcd_evaluation_uses_cpu():
+    calls = {}
+    fake_fcd = types.ModuleType('fcd')
+
+    def get_fcd(smiles1, smiles2, device=None):
+        calls['device'] = device
+        return 0.25
+
+    fake_fcd.get_fcd = get_fcd
+    previous = sys.modules.get('fcd')
+    sys.modules['fcd'] = fake_fcd
+    try:
+        assert compute_fcd(['C'], ['C']) == 0.25
+    finally:
+        if previous is None:
+            del sys.modules['fcd']
+        else:
+            sys.modules['fcd'] = previous
+    assert calls['device'] == 'cpu'
+
+
 if __name__ == '__main__':
     test_reference_caches_are_isolated_by_evaluation_split()
     test_qm9_caches_are_isolated_by_hydrogen_configuration()
     test_reference_cache_tag_cannot_escape_cache_directory()
+    test_fcd_evaluation_uses_cpu()
     print('DeFoG FCD cache tests passed')
