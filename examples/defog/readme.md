@@ -187,8 +187,7 @@ The audit checks repository integration, paper presets, dependencies, the algori
 
 Current status:
 
-- Planar, Tree, TLS, and QM9 runs are recorded below.
-- ZINC metrics require final protocol-aligned comparison.
+- Planar, Tree, TLS, QM9, and ZINC250k runs are recorded below.
 - SBM evaluation now runs with `graph-tool`, but the observed validity is 5% (2/40) at epoch 48000 versus about 90% in the paper. Treat SBM as an open reproduction gap, not a completed result.
 
 ## Benchmark Results
@@ -289,6 +288,42 @@ TL_BACKEND="torch" python defog_sample_only.py \
   --sample_distortion polydec \
   --omega 0.05 \
   --eta 0 \
+  --evaluate
+```
+
+### ZINC250k (1 seed, 10,000 samples, completed)
+
+The 300-epoch seed-0 checkpoint was evaluated once with 10,000 generated
+molecules and 1,000 sampling steps. The paper reports mean ± standard
+deviation across five runs, so the GammaGL column below is a completed
+single-run reproduction rather than a variance estimate.
+
+| Metric | Paper (DeFoG) | GammaGL | Difference |
+|--------|---------------|---------|------------|
+| Validity ↑ | 99.22 ± 0.08 | **95.44** | -3.78 pp |
+| Relaxed Validity ↑ | — | **99.59** | — |
+| Uniqueness ↑ | 99.99 ± 0.01 | **100.00** | +0.01 pp |
+| Novelty ↑ | — | **99.95** | — |
+| FCD ↓ | 1.425 ± 0.022 | **0.9819** | -0.4431 |
+| Number-distribution MAE ↓ | — | **0.000864** | — |
+| Node-distribution MAE ↓ | — | **0.002854** | — |
+| Edge-distribution MAE ↓ | — | **0.000405** | — |
+| Valency-distribution MAE ↓ | — | **0.000218** | — |
+
+*Paper-protocol evaluation command:*
+```bash
+TL_BACKEND="torch" python defog_sample_only.py \
+  --dataset zinc250k \
+  --data_root ./datasets \
+  --save_dir ./checkpoints_zinc250k_seed0 \
+  --seed 0 \
+  --num_samples 10000 \
+  --num_sample_fold 1 \
+  --sample_steps 1000 \
+  --sample_batch_size 40 \
+  --sample_distortion polydec \
+  --omega 0.1 \
+  --eta 300 \
   --evaluate
 ```
 
