@@ -12,6 +12,7 @@ if EXAMPLE_DIR not in sys.path:
     sys.path.insert(0, EXAMPLE_DIR)
 
 from defog_config import get_dataset_preset
+from dataset_utils import normalize_atom_decoder
 from defog_datasets.qm9_dataset import build_qm9_split_ids
 from defog_datasets.zinc250k_dataset import build_zinc_split_indices
 
@@ -32,6 +33,11 @@ def test_qm9_defog_split_is_deterministic_disjoint_and_complete():
 
 def test_qm9_preset_uses_original_split():
     assert get_dataset_preset('qm9')['use_defog_split'] is True
+
+
+def test_qm9_atom_decoder_uses_element_names():
+    atom_names = {0: 'C', 1: 'N', 2: 'O', 3: 'F'}
+    assert normalize_atom_decoder(atom_names) == ['C', 'N', 'O', 'F']
 
 
 def test_zinc_split_matches_original_held_out_protocol():

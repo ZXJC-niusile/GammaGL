@@ -112,6 +112,12 @@ class GenericNodeTransform:
         return data
 
 
+def normalize_atom_decoder(atom_names):
+    if isinstance(atom_names, dict):
+        return [atom_names[key] for key in sorted(atom_names)]
+    return list(atom_names)
+
+
 def load_real_dataset(name, root=None, conditional=False, target='mu',
                       remove_h=None, use_defog_split=False):
     if name == 'planar':
@@ -190,7 +196,7 @@ def load_real_dataset(name, root=None, conditional=False, target='mu',
                 dataset_infos['valency_distribution'] = stats['valency_distribution'].astype(np.float32).copy()
             dataset_infos['atom_weights'] = dict(stats['atom_weights'])
             dataset_infos['max_weight'] = float(stats['max_weight'])
-            dataset_infos['atom_decoder'] = list(atom_decoder)
+            dataset_infos['atom_decoder'] = normalize_atom_decoder(atom_decoder)
     else:
         dataset_infos = compute_dataset_infos(train_ds, num_node_types, num_edge_types)
 
