@@ -412,23 +412,14 @@ def compute_fcd(generated_smiles, reference_smiles):
     float
         FCD score, or -1 if computation fails.
     """
-    try:
-        from fcd import get_fcd
-    except ImportError:
-        print("  FCD: fcd package not installed. Install with: pip install fcd")
-        return -1.0
-
     import time
     print("  Starting FCD computation...")
     start = time.time()
 
     generated_smiles = [s for s in generated_smiles if s is not None]
     try:
-        fcd_score = get_fcd(
-            generated_smiles,
-            reference_smiles,
-            device='cpu',
-        )
+        from defog_fcd import compute_fcd_cpu_isolated
+        fcd_score = compute_fcd_cpu_isolated(generated_smiles, reference_smiles)
     except Exception as e:
         print(f"  Error in FCD computation: {e}. Setting FCD to -1.")
         fcd_score = -1.0

@@ -12,6 +12,7 @@ if EXAMPLE_DIR not in sys.path:
     sys.path.insert(0, EXAMPLE_DIR)
 
 from evaluator import smiles_cache_paths
+import defog_fcd
 from rdkit_functions import compute_fcd
 
 
@@ -63,7 +64,7 @@ def test_fcd_evaluation_uses_cpu():
     previous = sys.modules.get('fcd')
     sys.modules['fcd'] = fake_fcd
     try:
-        assert compute_fcd(['C'], ['C']) == 0.25
+        assert defog_fcd._compute_fcd_cpu(['C'], ['C']) == 0.25
     finally:
         if previous is None:
             del sys.modules['fcd']
@@ -72,9 +73,28 @@ def test_fcd_evaluation_uses_cpu():
     assert calls['device'] == 'cpu'
 
 
+def test_rdkit_compute_fcd_uses_isolated_helper():
+    calls = {}
+    original = defog_fcd.compute_fcd_cpu_isolated
+
+    def fake_compute(generated_smiles, reference_smiles):
+        calls['generated'] = generated_smiles
+        calls['reference'] = reference_smiles
+        return 0.5
+
+    defog_fcd.compute_fcd_cpu_isolated = fake_compute
+    try:
+        assert compute_fcd(['C', None], ['C']) == 0.5
+    finally:
+        defog_fcd.compute_fcd_cpu_isolated = original
+
+    assert calls == {'generated': ['C'], 'reference': ['C']}
+
+
 if __name__ == '__main__':
     test_reference_caches_are_isolated_by_evaluation_split()
     test_qm9_caches_are_isolated_by_hydrogen_configuration()
     test_reference_cache_tag_cannot_escape_cache_directory()
     test_fcd_evaluation_uses_cpu()
+    test_rdkit_compute_fcd_uses_isolated_helper()
     print('DeFoG FCD cache tests passed')
