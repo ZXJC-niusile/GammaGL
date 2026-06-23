@@ -327,17 +327,17 @@ TL_BACKEND="torch" python defog_sample_only.py \
   --evaluate
 ```
 
-### QM9 no-H (3 seeds, completed)
+### QM9 no-H (3 seeds, current evaluation)
 
-Trained for 1,000 epochs each without explicit hydrogens. Results compared against the DeFoG paper (no-H, 500 steps). **Best checkpoint evaluated with 10,000 samples, 500 denoising steps.** Seed 0 was re-evaluated after fixing dictionary-based atom decoder normalization and rebuilding the SMILES reference caches.
+Trained for 1,000 epochs each without explicit hydrogens. Results compared against the DeFoG paper (no-H, 500 steps). Seed 0 was retrained with the current masked-loss implementation and evaluated from its epoch-1000 `last_model` using 10,000 samples and 500 denoising steps. The validity metrics are comparable to the paper, but the Seed 0 FCD is not yet reproduced; this table records the current result rather than claiming strict reproduction completion.
 
 | Metric | Paper (DeFoG) | Seed 0 | Seed 1 | Seed 2 | Mean ± Std |
 |--------|---------------|--------|--------|--------|------------|
-| Validity ↑ | 99.3 ± 0.0 | 99.37 | 99.38 | 99.01 | **99.25 ± 0.17** |
-| Relaxed Validity ↑ | 99.4 ± 0.1 | 99.65 | 99.57 | 99.18 | **99.47 ± 0.21** |
-| Uniqueness ↑ | 96.3 ± 0.3 | 93.56 | 96.35 | 96.40 | **95.44 ± 1.33** |
-| Novelty ↑ | — | 33.76 | 33.17 | 33.47 | **33.47 ± 0.24** |
-| FCD ↓ | 0.12 ± 0.00 | 1.4947 | 0.1202 | 0.1033 | **0.5727 ± 0.6520** |
+| Validity ↑ | 99.3 ± 0.0 | 99.66 | 99.38 | 99.01 | **99.35 ± 0.27** |
+| Relaxed Validity ↑ | 99.4 ± 0.1 | 99.75 | 99.57 | 99.18 | **99.50 ± 0.24** |
+| Uniqueness ↑ | 96.3 ± 0.3 | 94.21 | 96.35 | 96.40 | **95.65 ± 1.01** |
+| Novelty ↑ | — | 31.63 | 33.17 | 33.47 | **32.76 ± 0.81** |
+| FCD ↓ | 0.12 ± 0.00 | 1.2386 | 0.1202 | 0.1033 | **0.4874 ± 0.5312** |
 
 *Training command:*
 ```bash
